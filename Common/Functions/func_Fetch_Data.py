@@ -1,44 +1,25 @@
 import os
 import requests
 import json
-import pandas as pd
-from abc import ABC, abstractmethod
 from tqdm import tqdm
-import zipfile  # Missing import
+import zipfile
 
-class DataFetcher(ABC):
+class JSONDataFetcher:
     def __init__(self, url, chunk_size, where_clause):
         self.url = url
         self.chunk_size = chunk_size
         self.where_clause = where_clause
 
-    @abstractmethod
-    def fetch_data(self, offset):
-        pass
-
-class JSONDataFetcher(DataFetcher):
     def fetch_data(self, offset):
         final_url = self.url.format(self.chunk_size, offset, self.where_clause)
         response = requests.get(final_url)
         return response.json()
 
-class CSVDataFetcher(DataFetcher):
-    def fetch_data(self, offset):
-        final_url = self.url.format(self.chunk_size, offset, self.where_clause)
-        response = requests.get(final_url)
-        return pd.read_csv(response.content)
-
-class XLSDataFetcher(DataFetcher):
-    def fetch_data(self, offset):
-        final_url = self.url.format(self.chunk_size, offset, self.where_clause)
-        response = requests.get(final_url)
-        return pd.read_excel(response.content)
-
 def fetch_store_data(fetcher, limit, offset, storage_dir, storage_file, compress=False, mode='w'):
     """
     Fetches data using the provided fetcher and stores it in a file.
     Parameters:
-    fetcher (DataFetcher): An instance of a DataFetcher subclass.
+    fetcher (JSONDataFetcher): An instance of JSONDataFetcher.
     limit (int): The maximum number of records to fetch.
     offset (int): The starting point for fetching records.
     storage_dir (str): The directory where the file will be stored.
@@ -90,6 +71,7 @@ def fetch_store_data(fetcher, limit, offset, storage_dir, storage_file, compress
     # Compress the file if compress is True
     if compress:
         zip_path = os.path.join(storage_dir, storage_file + '.zip')
+        print(f"Compressing file '{file_path}' to '{zip_path}'")
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(file_path, os.path.basename(file_path))
         os.remove(file_path)
