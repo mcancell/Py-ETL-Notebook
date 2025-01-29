@@ -1,5 +1,3 @@
-# General Info
-The project is currently under development and changes regularly both in terms of code and organization
 ### About Me 
 
 My name is Mike Cancell (https://www.linkedin.com/in/mikecancell/). If you’re visiting this repository, it’s likely because you want to evaluate my current Python skills. This repo will give you some insight into my capabilities. 
@@ -9,15 +7,17 @@ I’m still a novice in Python, but I’m learning more each day. On the other h
 While I don't have a public repository for my SQL work due to it being actual in-production code, I’m willing to share some code samples if you're seriously considering hiring me. The shared code will not contain any sensitive data, so you’ll be able to see how I model financial data and process KPIs without exposing any actual company information.
 
 ## My Local Dev Env
-While I may move code back to my cloud VM, to avoid costs am currently working locally (on a Win laptop). I do maintain a cloud machine instance on GCP, it is currently idle (to avoid monthly costs, lol).
+While I may move code back to my cloud VM, I am currently working locally on a Windows laptop to avoid costs. I do maintain a cloud instance on GCP, but it is currently idle to minimize monthly expenses.
 ### Env Requirements
 See the Requirements.txt file for the list of lib dependencies. (I try to Freeze the Reqs file regularly.)
 ### Code Deployment
 Right now, I am not using Docker, Kubernetes, etc. for code deployment. I may try that as an excercise in the future. But as of now, I am just using VS Code with a local env.
 ### AI Coding
-Ok, so I am a Python novice/journeyman ;-). 
-While, I code SQL by hand with zero AI-assist, for Python I am now indeed using AI, specifically Co-Pilot - and loving it! 
-Has AI changed my life in terms of coding? Yes, it has. It is allowing me to quickly come up to speed with the gazillions of Py libs. I am new to using AI for coding. I used to toil over hand-coding JavaScript, and other non-native languages. SQL would be considered by native language, although I used to be a C programmer back in the day a long time ago at Bell Labs...back in the horse & buggy days. (Don't ask...) Here's the takeway, using AI is not a crutch IMHO. You still MUST understand programming tasks to ask the right questions. And when it comes to Python, this is what I do.  
+I’m a Python novice/journeyman ;-). While I code SQL by hand without any AI assistance, I am now using AI—specifically Co-Pilot—for Python, and I absolutely love it! 
+
+Has AI changed my coding experience? Yes, it has. It's helping me quickly navigate the vast array of Python libraries. I'm new to using AI for coding; I used to spend a lot of time hand-coding in JavaScript and other non-native languages. SQL is my native language, although I was once a C programmer at Bell Labs—back in the horse-and-buggy days (don't ask...).
+
+Here’s the takeaway: using AI is not a crutch, in my opinion. You still need to understand programming tasks to ask the right questions. When it comes to Python, that's exactly what I focus on. 
 ## Project Goals
 The goal of the project is to demonstrate the typical types of pipelines and workflows that are performed when working with diffent types of Datasets. 
 Thus, while there are some algorythimic examples within the different pipelines, the main purpose about working with data. 
