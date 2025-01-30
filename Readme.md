@@ -65,3 +65,5 @@ This area contains the various pipelines for data cleaning, arrangement (e.g., s
 Once Dataframes are fully formulared they are pickled for caching and downstream operations, e.g., loading to a cloud DB, etc.
 ### Load
 This area containes the pipelines for loading data to a landing area, e.g., clould tables, datamart, etc.
+### Query
+This area contains SQL code that works on the Loaded Tables to Materialize Datasets for ultimate reporting/visulaization. 
