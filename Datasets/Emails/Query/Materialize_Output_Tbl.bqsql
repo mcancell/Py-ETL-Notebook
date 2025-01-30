@@ -1,0 +1,63 @@
+
+-- This script creates or replaces a table `output_table` in the `mikecancell-development.Datasets` dataset.
+-- The table is created using a WITH clause that defines two subqueries: `imap` and `domains`.
+
+-- Subquery: imap
+-- This subquery selects and processes email data from the `emails_imap` table.
+-- It performs the following operations:
+-- - Selects specific columns from the `emails_imap` table.
+-- - Calculates the count of emails by domain, day of the week, and manual category using window functions.
+-- - Calculates the average body length of emails by domain and day of the week using window functions.
+
+-- Subquery: domains
+-- This subquery selects domain-related data from the `main_domains_dim` table.
+-- It selects specific columns related to domain names, organization names, and web scraping metadata.
+
+-- Final SELECT statement
+-- This statement combines the results of the `imap` and `domains` subqueries.
+-- It performs a LEFT JOIN on the `imap` and `domains` subqueries based on the `From_Domain` and `Domain_Name` columns (case-insensitive).
+-- The final result includes all columns from the `imap` subquery (excluding `From_Domain`) and all columns from the `domains` subquery.
+CREATE OR REPLACE TABLE `mikecancell-development.Datasets.email_output_table` AS
+WITH 
+  imap AS (
+    SELECT
+      l1.*,
+      COUNT(*) OVER (PARTITION BY l1.From_Domain) AS Email_Count_By_Domain,
+      COUNT(*) OVER (PARTITION BY l1.Day_of_Week) AS Email_Count_By_Day,
+      COUNT(*) OVER (PARTITION BY l1.Manual_Category) AS Email_Count_By_Category,
+      AVG(LENGTH(Body_Text)) OVER (PARTITION BY l1.From_Domain) AS Avg_Body_Length_By_Domain,
+      AVG(LENGTH(Body_Text)) OVER (PARTITION BY l1.Day_of_Week) AS Avg_Body_Length_By_Day
+    FROM
+    (
+      SELECT
+        `Date` AS `Date`,
+        `Time` AS `Time`,
+        Day_of_Week,
+        Day_of_Week_String,
+        Subject,
+        LEFT(Body_Text, 200) AS Body_Text,
+        From_Addr,
+        From_Domain,
+        Email_Category AS Manual_Category,
+        ml_body_cat AS AI_Category
+      FROM `mikecancell-development.Datasets.emails_imap`
+    ) l1
+  ),
+  domains AS (
+    SELECT
+      Domain_Name,
+      Org_Name,
+      Name,
+      og_site_name AS Webscrape_Site_Name,
+      og_title AS Webscrape_Title,
+      og_description AS Webscrape_Description,
+      og_url AS Webscrape_URL
+    FROM `mikecancell-development.Datasets.main_domains_dim`
+  )
+
+SELECT
+  imap.* EXCEPT(From_Domain),
+  domains.*
+FROM imap
+LEFT JOIN domains
+  ON LOWER(imap.From_Domain) = LOWER(domains.Domain_Name);
