@@ -6,3 +6,5 @@ Lists:
     https://cloud.google.com/bigquery/docs/loading-data
     https://github.com/burningtree/awesome-json
     https://awesomerank.github.io/lists/jdorfman/awesome-json-datasets.html
+    https://catalog.data.gov/dataset/?res_format=JSON
+    https://dev.socrata.com/
