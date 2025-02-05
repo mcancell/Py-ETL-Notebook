@@ -39,7 +39,7 @@ After I exhaust each dataset, in terms of what could be analyzed from the data. 
 ### Orchestration and Deployment
 As of date of this writing, I am not using any orchestration tools (Airflow, NiFi, Dagster, etc.) I hope to start adding workflow deployment in the future.
 # Project Organization
-Project is organized by Dataset, with set having directories for Extract, Transform, Load, (and Orchestrate tbd)
+Project is organized by Dataset, with set having directories for Extract, Transform, Load, Analyze, (and Orchestrate tbd)
 ## Common
 This area contains common code, credentials, etc. which pertain across all Datasets
 ### Functions
