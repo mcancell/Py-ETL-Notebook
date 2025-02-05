@@ -1,0 +1,80 @@
+CREATE OR REPLACE TABLE `mikecancell-development.Datasets.LA_Crime_Grouped_By_Month` AS
+-- Define a common table expression (CTE) named 'facts'
+    WITH facts AS (
+        -- Select all columns from the subquery and add a rank column
+        SELECT 
+            a.*,
+            -- Rank crimes by month, area, and crime code, ordering by crime count descending
+            RANK() 
+                OVER (PARTITION BY a.datemon_occ, a.area_id, a.fk_crm_cd ORDER BY a.crime_count DESC) 
+                    AS rank_crimes_by_mon_area_crmcd
+        FROM (
+            -- Subquery to aggregate crime data by month, location, area, and crime code
+            SELECT
+                DATE_TRUNC(CAST(CAST(datetime_occ AS DATETIME) AS DATE), MONTH) AS datemon_occ, -- Truncate datetime to month
+                CAST(lat AS FLOAT64) AS lat, -- Convert latitude to float
+                CAST(lon AS FLOAT64) AS lon, -- Convert longitude to float
+                area AS area_id, -- Area of the crime
+                CAST(crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
+                COUNT(*) AS crime_count -- Count of crimes
+            FROM `mikecancell-development.Datasets.LA_Crime_crime_facts`
+            GROUP BY
+                datemon_occ,
+                lat,
+                lon,
+                area,
+                crm_cd
+            HAVING
+                datemon_occ >= '2022-01-01' -- Filter for crimes occurring from January 2022 onwards
+            ORDER BY
+                crime_count DESC, -- Order by crime count descending
+                datemon_occ ASC, -- Order by date ascending
+                lat ASC, -- Order by latitude ascending
+                lon ASC, -- Order by longitude ascending
+                area ASC -- Order by area ascending
+        ) a
+    ),
+
+    -- Define a CTE named 'crimes' to get crime descriptions
+    crimes AS (
+        SELECT
+            CAST(fk_crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
+            crm_cd_desc -- Crime description
+        FROM mikecancell-development.Datasets.LA_Crime_dim_crime
+    ),
+
+    -- Define a CTE named 'locations' to get location display names
+    locations AS (
+        SELECT
+            CAST(lat AS FLOAT64) AS lat, -- Latitude
+            CAST(lon AS FLOAT64) AS lon, -- Longitude
+            geo_display_name -- Geographical display name
+        FROM mikecancell-development.Datasets.LA_Crime_dim_location
+    ),
+    areas AS (
+        SELECT
+            fk_area AS fk_area, -- Assuming the correct column name is area_id
+            area_name
+        FROM mikecancell-development.Datasets.LA_Crime_dim_area
+    )
+
+    -- Main query to join facts, crimes, and locations CTEs
+    SELECT 
+        facts.*, -- All columns from facts
+        crimes.crm_cd_desc, -- Crime description from crimes
+        areas.area_name, -- Area name from areas
+        locations.geo_display_name -- Geographical display name from locations
+    FROM facts 
+    JOIN crimes ON facts.fk_crm_cd = crimes.fk_crm_cd -- Join facts with crimes on crime code
+    JOIN locations ON facts.lat = locations.lat AND facts.lon = locations.lon -- Join facts with locations on latitude and longitude
+    JOIN areas ON facts.area_id = areas.fk_area -- Join facts with areas on area_id
+    WHERE crm_cd_desc LIKE '%ASSAULT%' OR crm_cd_desc LIKE '%HOMOCIDE%' OR crm_cd_desc LIKE '%RAPE%' -- Filter for specific crime descriptions
+    -- Show the schema of the created table
+    ;
+    SELECT 
+        column_name, 
+        data_type 
+    FROM 
+        `mikecancell-development.Datasets.INFORMATION_SCHEMA.COLUMNS` 
+    WHERE 
+        table_name = 'LA_Crime_Grouped_By_Month';
