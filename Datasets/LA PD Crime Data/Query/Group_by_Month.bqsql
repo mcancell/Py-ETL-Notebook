@@ -6,17 +6,18 @@ CREATE OR REPLACE TABLE `mikecancell-development.Datasets.LA_Crime_Grouped_By_Mo
             a.*,
             -- Rank crimes by month, area, and crime code, ordering by crime count descending
             RANK() 
-                OVER (PARTITION BY a.datemon_occ, a.area_id, a.fk_crm_cd ORDER BY a.crime_count DESC) 
-                    AS rank_crimes_by_mon_area_crmcd
+                OVER (PARTITION BY a.datemon_occ, a.area_id, a.fk_crm_cd ORDER BY a.avg_crimes_per_day DESC) 
+                    AS rank_avg_crimes_per_day_by_mon_area_crmcd
         FROM (
             -- Subquery to aggregate crime data by month, location, area, and crime code
-            SELECT
+            SELECT DISTINCT
                 DATE_TRUNC(CAST(CAST(datetime_occ AS DATETIME) AS DATE), MONTH) AS datemon_occ, -- Truncate datetime to month
                 CAST(lat AS FLOAT64) AS lat, -- Convert latitude to float
                 CAST(lon AS FLOAT64) AS lon, -- Convert longitude to float
                 area AS area_id, -- Area of the crime
                 CAST(crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
-                COUNT(*) AS crime_count -- Count of crimes
+                COUNT(*) AS crime_count, -- Count of crimes
+                COUNT(*) / COUNT(DISTINCT CAST(datetime_occ AS DATE)) AS avg_crimes_per_day -- Average number of crimes per day
             FROM `mikecancell-development.Datasets.LA_Crime_crime_facts`
             GROUP BY
                 datemon_occ,
