@@ -1,0 +1,75 @@
+CREATE OR REPLACE TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
+PARTITION BY datemon_occ
+CLUSTER BY area_id, fk_crm_cd AS
+-- Define a common table expression (CTE) named 'facts_grouped'
+WITH facts_grouped AS (
+    -- Select all columns from the subquery and add a rank column
+    SELECT 
+        a.*,
+        RANK() OVER (PARTITION BY area_id ORDER BY avg_crimes_per_day DESC) AS rank_avg_crimes_per_day_by_area, 
+        RANK() OVER (PARTITION BY area_id, fk_crm_cd ORDER BY avg_crimes_per_day DESC) AS rank_avg_crimes_per_day_by_area_crmcd
+    FROM 
+    (
+        SELECT 
+            DATE_TRUNC(CAST(datetime_occ AS DATE), YEAR)    AS dateyear_occ, -- Truncate datetime to year
+            DATE_TRUNC(CAST(datetime_occ AS DATE), MONTH)   AS datemon_occ, -- Truncate datetime to month
+            CAST(lat AS FLOAT64) AS lat, -- Convert latitude to float
+            CAST(lon AS FLOAT64) AS lon, -- Convert longitude to float
+            area AS area_id, -- Area of the crime
+            CASE 
+                WHEN vict_age < 18 THEN 'Under 18'
+                WHEN vict_age BETWEEN 18 AND 34 THEN '18-34'
+                WHEN vict_age BETWEEN 35 AND 54 THEN '35-54'
+                ELSE '55 and over'
+            END AS vict_age_group, -- Victim age group
+            CAST(crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
+            COUNT(*) AS crime_count, -- Count of crimes
+            COUNT(*) / COUNT(DISTINCT DATE(datetime_occ)) AS avg_crimes_per_day -- Average number of crimes per day
+        FROM `mikecancell-development.Datasets.LA_Crime_crime_facts`
+        GROUP BY
+            dateyear_occ,
+            datemon_occ,
+            lat,
+            lon,
+            area_id,
+            fk_crm_cd,
+            vict_age_group
+    ) AS a
+),
+
+-- Define a CTE named 'crimes' to get crime descriptions
+crimes AS (
+    SELECT
+        CAST(fk_crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
+        crm_cd_desc -- Crime description
+    FROM mikecancell-development.Datasets.LA_Crime_dim_crime
+),
+
+-- Define a CTE named 'locations' to get location display names
+locations AS (
+    SELECT
+        CAST(lat AS FLOAT64) AS lat, -- Latitude
+        CAST(lon AS FLOAT64) AS lon, -- Longitude
+        geo_display_name -- Geographical display name
+    FROM mikecancell-development.Datasets.LA_Crime_dim_location
+),
+
+areas AS (
+    SELECT
+        fk_area AS fk_area, -- Assuming the correct column name is area_id
+        area_name
+    FROM mikecancell-development.Datasets.LA_Crime_dim_area
+)
+
+-- Main query to join facts_grouped, crimes, and locations CTEs
+SELECT 
+    facts_grouped.*, -- All columns from facts_grouped
+    crimes.crm_cd_desc, -- Crime description from crimes
+    areas.area_name, -- Area name from areas
+    locations.geo_display_name -- Geographical display name from locations
+FROM facts_grouped 
+JOIN crimes ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped with crimes on crime code
+JOIN locations ON facts_grouped.lat = locations.lat AND facts_grouped.lon = locations.lon -- Join facts_grouped with locations on latitude and longitude
+JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
+WHERE crimes.crm_cd_desc LIKE '%ASSAULT%' OR crimes.crm_cd_desc LIKE '%HOMICIDE%' OR crimes.crm_cd_desc LIKE '%RAPE%' -- Filter for specific crime descriptions
+;
