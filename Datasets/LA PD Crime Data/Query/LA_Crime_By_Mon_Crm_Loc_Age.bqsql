@@ -3,28 +3,54 @@ PARTITION BY datemon_occ
 CLUSTER BY area_id, fk_crm_cd AS
 -- Define a common table expression (CTE) named 'facts_grouped'
 WITH facts_grouped AS (
-    -- Select all columns from the subquery and add a rank column
-    SELECT 
+    SELECT
         a.*,
-        RANK() OVER (PARTITION BY area_id ORDER BY avg_crimes_per_day DESC) AS rank_avg_crimes_per_day_by_area, 
-        RANK() OVER (PARTITION BY area_id, fk_crm_cd ORDER BY avg_crimes_per_day DESC) AS rank_avg_crimes_per_day_by_area_crmcd
-    FROM 
-    (
+        -- Rank average crimes per day by area
+        RANK() OVER (PARTITION BY a.area_id ORDER BY a.avg_crimes_per_day DESC)                         AS rank_avg_crimes_per_day_by_area,
+        -- Rank average crimes per day by area and crime code
+        RANK() OVER (PARTITION BY a.area_id, fk_crm_cd ORDER BY a.avg_crimes_per_day DESC)              AS rank_avg_crimes_per_day_by_area_crmcd,
+        -- Previous month average crimes per day by area
+        LAG(a.avg_crimes_per_day) OVER (PARTITION BY a.area_id ORDER BY a.datemon_occ)                  AS prev_month_avg_crimes_per_day_by_area,
+        -- Previous month average crimes per day by area and crime code
+        LAG(a.avg_crimes_per_day) OVER (PARTITION BY a.area_id, a.fk_crm_cd ORDER BY a.datemon_occ)     AS prev_month_avg_crimes_per_day_by_area_crmcd,
+        -- Previous month average crimes per day by area and age group
+        LAG(a.avg_crimes_per_day) OVER (PARTITION BY a.area_id, a.vict_age_group ORDER BY a.datemon_occ)AS prev_month_avg_crimes_per_day_by_area_age,
+        -- Correlation between crime count and area
+        CORR(a.crime_count, CAST(a.area_id AS FLOAT64)) OVER ()                                         AS corr_crime_count_area,
+        -- Correlation between crime code and area
+        CORR(CAST(a.fk_crm_cd AS FLOAT64), CAST(a.area_id AS FLOAT64)) OVER ()                          AS corr_crime_code_area,
+        -- Correlation between crime count and age group
+        CORR(a.crime_count, CAST(CASE 
+            WHEN a.vict_age_group = 'Under 18' THEN 1
+            WHEN a.vict_age_group = '18-34' THEN 2
+            WHEN a.vict_age_group = '35-54' THEN 3
+            ELSE 4
+        END AS FLOAT64)) OVER () AS corr_crime_count_age_group
+    FROM (
         SELECT 
-            DATE_TRUNC(CAST(datetime_occ AS DATE), YEAR)    AS dateyear_occ, -- Truncate datetime to year
-            DATE_TRUNC(CAST(datetime_occ AS DATE), MONTH)   AS datemon_occ, -- Truncate datetime to month
-            CAST(lat AS FLOAT64) AS lat, -- Convert latitude to float
-            CAST(lon AS FLOAT64) AS lon, -- Convert longitude to float
-            area AS area_id, -- Area of the crime
+            -- Truncate datetime to year
+            DATE_TRUNC(CAST(datetime_occ AS DATE), YEAR) AS dateyear_occ,
+            -- Truncate datetime to month
+            DATE_TRUNC(CAST(datetime_occ AS DATE), MONTH) AS datemon_occ,
+            -- Cast latitude to FLOAT64
+            CAST(lat AS FLOAT64) AS lat,
+            -- Cast longitude to FLOAT64
+            CAST(lon AS FLOAT64) AS lon,
+            -- Area ID
+            area AS area_id,
+            -- Victim age group
             CASE 
                 WHEN vict_age < 18 THEN 'Under 18'
                 WHEN vict_age BETWEEN 18 AND 34 THEN '18-34'
                 WHEN vict_age BETWEEN 35 AND 54 THEN '35-54'
                 ELSE '55 and over'
-            END AS vict_age_group, -- Victim age group
-            CAST(crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
-            COUNT(*) AS crime_count, -- Count of crimes
-            COUNT(*) / COUNT(DISTINCT DATE(datetime_occ)) AS avg_crimes_per_day -- Average number of crimes per day
+            END AS vict_age_group,
+            -- Cast crime code to SMALLINT
+            CAST(crm_cd AS SMALLINT) AS fk_crm_cd,
+            -- Count of crimes
+            COUNT(*) AS crime_count,
+            -- Average crimes per day
+            COUNT(*) / COUNT(DISTINCT DATE(datetime_occ)) AS avg_crimes_per_day
         FROM `mikecancell-development.Datasets.LA_Crime_crime_facts`
         GROUP BY
             dateyear_occ,
@@ -71,5 +97,5 @@ FROM facts_grouped
 JOIN crimes ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped with crimes on crime code
 JOIN locations ON facts_grouped.lat = locations.lat AND facts_grouped.lon = locations.lon -- Join facts_grouped with locations on latitude and longitude
 JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
-WHERE crimes.crm_cd_desc LIKE '%ASSAULT%' OR crimes.crm_cd_desc LIKE '%HOMICIDE%' OR crimes.crm_cd_desc LIKE '%RAPE%' -- Filter for specific crime descriptions
+-- WHERE crimes.crm_cd_desc LIKE '%ASSAULT%' OR crimes.crm_cd_desc LIKE '%HOMICIDE%' OR crimes.crm_cd_desc LIKE '%RAPE%' -- Filter for specific crime descriptions
 ;
