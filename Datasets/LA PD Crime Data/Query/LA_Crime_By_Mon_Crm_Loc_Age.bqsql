@@ -114,10 +114,45 @@ WITH
     (
         SELECT
             CAST(fk_crm_cd AS SMALLINT) AS fk_crm_cd, -- Crime code
-            crm_cd_desc -- Crime description
+            crm_cd_desc, -- Crime description
+            CASE 
+                WHEN crm_cd_desc LIKE '%HOMICIDE%'              THEN '01 - Severe'
+                WHEN crm_cd_desc LIKE '%RAPE%'                  THEN '01 - Severe'
+
+                WHEN crm_cd_desc LIKE '%ROBBERY%'               THEN '02- High'
+                WHEN crm_cd_desc LIKE '%HUMAN TRAFFICKING%'     THEN '02- High' 
+                WHEN crm_cd_desc LIKE '%KIDNAPPING%'            THEN '02- High'
+                WHEN crm_cd_desc LIKE '%AGGRAVATED ASSAULT%'    THEN '02- High'
+
+                WHEN crm_cd_desc LIKE '%CHILD ABUSE%'           THEN '03 - Moderate'
+                WHEN (
+                        crm_cd_desc LIKE '%BATTERY%' 
+                    AND crm_cd_desc NOT LIKE '%SIMPLE%'               
+                )                                               THEN '03 - Moderate'
+                WHEN (
+                            crm_cd_desc LIKE '%ASSAULT%'
+                        AND crm_cd_desc NOT LIKE '%SIMPLE%'               
+                )                                               THEN '03 - Moderate'
+                WHEN crm_cd_desc LIKE '%ARSON%'                 THEN '03 - Moderate'
+                WHEN crm_cd_desc LIKE '%BURGLARY%'              THEN '03 - Moderate'
+                WHEN (
+                        crm_cd_desc LIKE '%THEFT%' 
+                    AND crm_cd_desc LIKE '%GRAND%'
+                )                                               THEN '03 - Moderate'
+                WHEN crm_cd_desc LIKE '%BURGLARY%'              THEN '03 - Moderate'
+                WHEN crm_cd_desc LIKE '%CHILD PORNOGRAPHY%'     THEN '03 - Moderate'
+                WHEN crm_cd_desc LIKE '%EXTORTION%'             THEN '03 - Moderate'
+                                                                ELSE '04 - Low'
+            END AS crime_severity,
+            (
+                   (crm_cd_desc LIKE '%ASSAULT%' AND crm_cd_desc NOT LIKE '%SIMPLE%') 
+                OR (crm_cd_desc LIKE '%BATTERY%' AND crm_cd_desc NOT LIKE '%SIMPLE%') 
+                OR (crm_cd_desc LIKE '%MANSLAUGHTER%' AND crm_cd_desc NOT LIKE '%VEHICULAR%')
+                OR (crm_cd_desc LIKE '%HOMICIDE%')
+                OR (crm_cd_desc LIKE '%RAPE%') 
+            ) AS is_crime_violent
         FROM mikecancell-development.Datasets.LA_Crime_dim_crime
     ),
-
     -- Define a CTE named 'locations' to get location display names
     locations AS 
     (
@@ -139,6 +174,8 @@ WITH
 SELECT 
     facts_grouped.*, -- All columns from facts_grouped
     crimes.crm_cd_desc, -- Crime description from crimes
+    crimes.crime_severity, -- Crime severity from crimes
+    crimes.is_crime_violent, -- Is crime violent from crimes    
     areas.area_name, -- Area name from areas
     locations.geo_display_name -- Geographical display name from locations
 FROM facts_grouped 
@@ -146,103 +183,44 @@ JOIN crimes ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped 
 JOIN locations ON facts_grouped.lat = locations.lat AND facts_grouped.lon = locations.lon -- Join facts_grouped with locations on latitude and longitude
 JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
 ;
-ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-SET OPTIONS (
-    description="Table containing LA crime data aggregated by month, crime location, and victim age group"
-);
--- Add descriptions to columns
--- Note: The descriptions are based on the assumptions made in the query
--- Please update the descriptions based on the actual data and business requirements
-    -- Year of occurrence
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN dateyear_occ SET OPTIONS (description="Year of occurrence");
-    -- Month of occurrence
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN datemon_occ SET OPTIONS (description="Month of occurrence");
-    -- Latitude
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN lat SET OPTIONS (description="Latitude");
-    -- Longitude
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN lon SET OPTIONS (description="Longitude");
-    -- Area ID
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN area_id SET OPTIONS (description="Area ID");
-    -- Victim age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN vict_age_group SET OPTIONS (description="Victim age group");
-    -- Crime code
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN fk_crm_cd SET OPTIONS (description="Crime code");
-    -- Count of crimes
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN crime_count SET OPTIONS (description="Count of crimes");
-    -- Average crimes per day
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN avg_crimes_per_day SET OPTIONS (description="Average crimes per day");
-    -- Rank of average crimes per day by area
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN rank_avg_crimes_per_day_by_area SET OPTIONS (description="Rank of average crimes per day by area");
-    -- Rank of average crimes per day by area and crime code
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN rank_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Rank of average crimes per day by area and crime code");
-    -- Rank of average crimes per day by area and age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN rank_avg_crimes_per_day_by_area_age SET OPTIONS (description="Rank of average crimes per day by area and age group");
-    -- Rank of average crimes per day by area and age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN prev_month_avg_crimes_per_day_by_area SET OPTIONS (description="Previous month average crimes per day by area");
-    -- Previous month average crimes per day by area and crime code
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Previous month average crimes per day by area and crime code");
-    -- Previous month average crimes per day by area and age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_age SET OPTIONS (description="Previous month average crimes per day by area and age group");
-    -- Correlation between crime count and area
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN corr_crime_count_area SET OPTIONS (description="Correlation between crime count and area");
-    -- Correlation between crime code and area
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN corr_crime_code_area SET OPTIONS (description="Correlation between crime code and area");
-    -- Correlation between crime count and age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN corr_crime_count_age_group SET OPTIONS (description="Correlation between crime count and age group");
-    -- Crime description
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN crm_cd_desc SET OPTIONS (description="Crime description");
-    -- Area name
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN area_name SET OPTIONS (description="Area name");
-    -- Geographical display name
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN geo_display_name SET OPTIONS (description="Geographical display name");
-    -- Percentage change in average crimes per day by area
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN pct_change_avg_crimes_per_day_by_area SET OPTIONS (description="Percentage change in average crimes per day by area");
-    -- Percentage change in average crimes per day by area and crime code
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Percentage change in average crimes per day by area and crime code");
-    -- Percentage change in average crimes per day by area and age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_age SET OPTIONS (description="Percentage change in average crimes per day by area and age group");
-    -- Ranking of average crimes per day by area
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN avg_crimes_per_day_by_area_ranking SET OPTIONS (description="Ranking of average crimes per day by area");
-    -- Ranking of average crimes per day by area and crime code
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN avg_crimes_per_day_by_area_crmcd_ranking SET OPTIONS (description="Ranking of average crimes per day by area and crime code");
-    -- Crime score
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN crime_score SET OPTIONS (description="Crime score");
-    -- Crime score by crime code
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN crime_score_by_crmcd SET OPTIONS (description="Crime score by crime code");
-    -- Crime score by age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN crime_score_by_age_group SET OPTIONS (description="Crime score by age group");
-    -- Correlation strength between crime count and age group
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN corr_crime_count_age_group_strength SET OPTIONS (description="Correlation strength between crime count and age group");
-    -- Crime density
-        ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN crime_density SET OPTIONS (description="Crime density");
+
+-- Add descriptions to columns in a single ALTER TABLE statement
+    ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
+        SET OPTIONS (
+            description="Table containing LA crime data aggregated by month, crime location, and victim age group"
+        );
+    ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
+        ALTER COLUMN dateyear_occ SET OPTIONS (description="Year of occurrence"),
+        ALTER COLUMN datemon_occ SET OPTIONS (description="Month of occurrence"),
+        ALTER COLUMN lat SET OPTIONS (description="Latitude"),
+        ALTER COLUMN lon SET OPTIONS (description="Longitude"),
+        ALTER COLUMN area_id SET OPTIONS (description="Area ID"),
+        ALTER COLUMN vict_age_group SET OPTIONS (description="Victim age group"),
+        ALTER COLUMN fk_crm_cd SET OPTIONS (description="Crime code"),
+        ALTER COLUMN crime_count SET OPTIONS (description="Count of crimes"),
+        ALTER COLUMN avg_crimes_per_day SET OPTIONS (description="Average crimes per day"),
+        ALTER COLUMN rank_avg_crimes_per_day_by_area SET OPTIONS (description="Rank of average crimes per day by area"),
+        ALTER COLUMN rank_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Rank of average crimes per day by area and crime code"),
+        ALTER COLUMN rank_avg_crimes_per_day_by_area_age SET OPTIONS (description="Rank of average crimes per day by area and age group"),
+        ALTER COLUMN prev_month_avg_crimes_per_day_by_area SET OPTIONS (description="Previous month average crimes per day by area"),
+        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Previous month average crimes per day by area and crime code"),
+        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_age SET OPTIONS (description="Previous month average crimes per day by area and age group"),
+        ALTER COLUMN corr_crime_count_area SET OPTIONS (description="Correlation between crime count and area"),
+        ALTER COLUMN corr_crime_code_area SET OPTIONS (description="Correlation between crime code and area"),
+        ALTER COLUMN corr_crime_count_age_group SET OPTIONS (description="Correlation between crime count and age group"),
+        ALTER COLUMN crm_cd_desc SET OPTIONS (description="Crime description"),
+        ALTER COLUMN area_name SET OPTIONS (description="Area name"),
+        ALTER COLUMN geo_display_name SET OPTIONS (description="Geographical display name"),
+        ALTER COLUMN pct_change_avg_crimes_per_day_by_area SET OPTIONS (description="Percentage change in average crimes per day by area"),
+        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Percentage change in average crimes per day by area and crime code"),
+        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_age SET OPTIONS (description="Percentage change in average crimes per day by area and age group"),
+        ALTER COLUMN avg_crimes_per_day_by_area_ranking SET OPTIONS (description="Ranking of average crimes per day by area"),
+        ALTER COLUMN avg_crimes_per_day_by_area_crmcd_ranking SET OPTIONS (description="Ranking of average crimes per day by area and crime code"),
+        ALTER COLUMN crime_score SET OPTIONS (description="Crime score"),
+        ALTER COLUMN crime_score_by_crmcd SET OPTIONS (description="Crime score by crime code"),
+        ALTER COLUMN crime_score_by_age_group SET OPTIONS (description="Crime score by age group"),
+        ALTER COLUMN corr_crime_count_age_group_strength SET OPTIONS (description="Correlation strength between crime count and age group"),
+        ALTER COLUMN crime_density SET OPTIONS (description="Crime density"),
+        ALTER COLUMN crime_severity SET OPTIONS (description="Crime severity"),
+        ALTER COLUMN is_crime_violent SET OPTIONS (description="Is crime violent")
+;
