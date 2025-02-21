@@ -60,4 +60,5 @@ SELECT
   domains.*
 FROM imap
 LEFT JOIN domains
-  ON LOWER(imap.From_Domain) = LOWER(domains.Domain_Name);
+  ON LOWER(imap.From_Domain) = LOWER(domains.Domain_Name)
+WHERE Manual_Category LIKE '%Job%';
