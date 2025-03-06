@@ -8,47 +8,51 @@ WITH
         SELECT 
             b.*,
             -- Calculate percentage change in average crimes per day by area
-            ((b.avg_crimes_per_day - b.prev_month_avg_crimes_per_day_by_area) / b.prev_month_avg_crimes_per_day_by_area) AS pct_change_avg_crimes_per_day_by_area,
+            ((b.avg_crimes_per_day - b.prev_month_avg_crimes_per_day_by_area) / b.prev_month_avg_crimes_per_day_by_area)                AS pct_change_avg_crimes_per_day_by_area,
             -- Calculate percentage change in average crimes per day by area and crime code
-            ((b.avg_crimes_per_day - b.prev_month_avg_crimes_per_day_by_area_crmcd) / b.prev_month_avg_crimes_per_day_by_area_crmcd) AS pct_change_avg_crimes_per_day_by_area_crmcd,
+            ((b.avg_crimes_per_day - b.prev_month_avg_crimes_per_day_by_area_crmcd) / b.prev_month_avg_crimes_per_day_by_area_crmcd)    AS pct_change_avg_crimes_per_day_by_area_crmcd,
             -- Calculate percentage change in average crimes per day by area and age group
-            ((b.avg_crimes_per_day - b.prev_month_avg_crimes_per_day_by_area_age) / b.prev_month_avg_crimes_per_day_by_area_age) AS pct_change_avg_crimes_per_day_by_area_age,
+            ((b.avg_crimes_per_day - b.prev_month_avg_crimes_per_day_by_area_age) / b.prev_month_avg_crimes_per_day_by_area_age)        AS pct_change_avg_crimes_per_day_by_area_age,
             -- Rank average crimes per day by area
             CASE 
-                WHEN b.rank_avg_crimes_per_day_by_area <= 5 THEN "Very High"
-                WHEN b.rank_avg_crimes_per_day_by_area <= 10 THEN "High"
-                WHEN b.rank_avg_crimes_per_day_by_area <= 20 THEN "Moderate"
+                WHEN b.rank_avg_crimes_per_day_by_area <= 5     THEN "Very High"
+                WHEN b.rank_avg_crimes_per_day_by_area <= 10    THEN "High"
+                WHEN b.rank_avg_crimes_per_day_by_area <= 20    THEN "Moderate"
                 ELSE "Low"
             END AS avg_crimes_per_day_by_area_ranking,
             -- Rank average crimes per day by area and crime code
             CASE 
-                WHEN b.rank_avg_crimes_per_day_by_area_crmcd <= 5 THEN "Very High"
-                WHEN b.rank_avg_crimes_per_day_by_area_crmcd <= 10 THEN "High"
-                WHEN b.rank_avg_crimes_per_day_by_area_crmcd <= 20 THEN "Moderate"
+                WHEN b.rank_avg_crimes_per_day_by_area_crmcd <= 5   THEN "Very High"
+                WHEN b.rank_avg_crimes_per_day_by_area_crmcd <= 10  THEN "High"
+                WHEN b.rank_avg_crimes_per_day_by_area_crmcd <= 20  THEN "Moderate"
                 ELSE "Low"
             END AS avg_crimes_per_day_by_area_crmcd_ranking,
             -- Calculate crime score
-            (b.crime_count * 0.6) + (b.avg_crimes_per_day * 0.3) + (b.rank_avg_crimes_per_day_by_area * 0.1) AS crime_score,
+            (b.crime_count * 0.6) + (b.avg_crimes_per_day * 0.3) + (b.rank_avg_crimes_per_day_by_area * 0.1)        AS crime_score,
             -- Calculate crime score by crime code
-            (b.crime_count * 0.6) + (b.avg_crimes_per_day * 0.3) + (b.rank_avg_crimes_per_day_by_area_crmcd * 0.1) AS crime_score_by_crmcd,
+            (b.crime_count * 0.6) + (b.avg_crimes_per_day * 0.3) + (b.rank_avg_crimes_per_day_by_area_crmcd * 0.1)  AS crime_score_by_crmcd,
             -- Calculate crime score by age group
-            (b.crime_count * 0.6) + (b.avg_crimes_per_day * 0.3) + (b.rank_avg_crimes_per_day_by_area_age * 0.1) AS crime_score_by_age_group,
+            (b.crime_count * 0.6) + (b.avg_crimes_per_day * 0.3) + (b.rank_avg_crimes_per_day_by_area_age * 0.1)    AS crime_score_by_age_group,
             -- Determine correlation strength between crime count and age group
             CASE 
                 WHEN b.corr_crime_count_age_group > 0.5 THEN "Strong Correlation"
-                WHEN b.corr_crime_count_age_group > 0 THEN "Moderate Correlation"
+                WHEN b.corr_crime_count_age_group > 0   THEN "Moderate Correlation"
                 ELSE "Weak/No Correlation"
             END AS corr_crime_count_age_group_strength,
             -- Determine crime density
             CASE 
-                WHEN b.crime_count > 1000 THEN "High Density"
-                WHEN b.crime_count > 500 THEN "Moderate Density"
+                WHEN b.crime_count > 1000   THEN "High Density"
+                WHEN b.crime_count > 500    THEN "Moderate Density"
                 ELSE "Low Density"
             END AS crime_density
         FROM
         (
             SELECT
                 a.*,
+                -- Count the rows in the month
+                COUNT(*) OVER (PARTITION BY a.datemon_occ) AS crime_count_in_month,
+                -- Count the rows in the subquery
+                COUNT(*) OVER ()                                                                                AS total_crime_rows,
                 -- Rank average crimes per day by area
                 RANK() OVER (PARTITION BY a.area_id ORDER BY a.avg_crimes_per_day DESC)                         AS rank_avg_crimes_per_day_by_area,
                 -- Rank average crimes per day by area and crime code
@@ -171,17 +175,17 @@ WITH
     )
 
 -- Main query to join facts_grouped, crimes, and locations CTEs
-SELECT 
+SELECT DISTINCT
     facts_grouped.*, -- All columns from facts_grouped
     crimes.crm_cd_desc, -- Crime description from crimes
     crimes.crime_severity, -- Crime severity from crimes
     crimes.is_crime_violent, -- Is crime violent from crimes    
     areas.area_name, -- Area name from areas
-    locations.geo_display_name -- Geographical display name from locations
+    locations.geo_display_name, -- Geographical display name from locations
 FROM facts_grouped 
-JOIN crimes ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped with crimes on crime code
-JOIN locations ON facts_grouped.lat = locations.lat AND facts_grouped.lon = locations.lon -- Join facts_grouped with locations on latitude and longitude
-JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
+LEFT JOIN crimes ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped with crimes on crime code
+LEFT JOIN locations ON facts_grouped.lat = locations.lat AND facts_grouped.lon = locations.lon -- Join facts_grouped with locations on latitude and longitude
+LEFT JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
 ;
 
 -- Add descriptions to columns in a single ALTER TABLE statement
