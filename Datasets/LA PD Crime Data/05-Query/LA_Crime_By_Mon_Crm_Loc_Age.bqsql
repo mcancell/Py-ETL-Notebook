@@ -172,6 +172,14 @@ WITH
             fk_area AS fk_area, -- Assuming the correct column name is area_id
             area_name
         FROM mikecancell-development.Datasets.LA_Crime_dim_area
+    ),
+    -- Define a CTE names 'census' to get census data
+    census AS (
+        SELECT
+            lat,
+            lon,
+            CAST(block_pop_2020 AS INTEGER) AS population,
+        FROM mikecancell-development.Datasets.LA_Crime_dim_census
     )
 
 -- Main query to join facts_grouped, crimes, and locations CTEs
@@ -182,10 +190,12 @@ SELECT DISTINCT
     crimes.is_crime_violent, -- Is crime violent from crimes    
     areas.area_name, -- Area name from areas
     locations.geo_display_name, -- Geographical display name from locations
+    census.population -- Population from census
 FROM facts_grouped 
-LEFT JOIN crimes ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped with crimes on crime code
+LEFT JOIN crimes    ON facts_grouped.fk_crm_cd = crimes.fk_crm_cd -- Join facts_grouped with crimes on crime code
 LEFT JOIN locations ON facts_grouped.lat = locations.lat AND facts_grouped.lon = locations.lon -- Join facts_grouped with locations on latitude and longitude
-LEFT JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
+LEFT JOIN areas     ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped with areas on area_id
+LEFT JOIN census    ON facts_grouped.lat = census.lat AND facts_grouped.lon = census.lon -- Join facts_grouped with census on latitude and longitude
 ;
 
 -- Add descriptions to columns in a single ALTER TABLE statement
@@ -194,37 +204,38 @@ LEFT JOIN areas ON facts_grouped.area_id = areas.fk_area -- Join facts_grouped w
             description="Table containing LA crime data aggregated by month, crime location, and victim age group"
         );
     ALTER TABLE `mikecancell-development.Datasets.LA_Crime_By_Mon_Crm_Loc_Age`
-        ALTER COLUMN dateyear_occ SET OPTIONS (description="Year of occurrence"),
-        ALTER COLUMN datemon_occ SET OPTIONS (description="Month of occurrence"),
-        ALTER COLUMN lat SET OPTIONS (description="Latitude"),
-        ALTER COLUMN lon SET OPTIONS (description="Longitude"),
-        ALTER COLUMN area_id SET OPTIONS (description="Area ID"),
-        ALTER COLUMN vict_age_group SET OPTIONS (description="Victim age group"),
-        ALTER COLUMN fk_crm_cd SET OPTIONS (description="Crime code"),
-        ALTER COLUMN crime_count SET OPTIONS (description="Count of crimes"),
-        ALTER COLUMN avg_crimes_per_day SET OPTIONS (description="Average crimes per day"),
-        ALTER COLUMN rank_avg_crimes_per_day_by_area SET OPTIONS (description="Rank of average crimes per day by area"),
-        ALTER COLUMN rank_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Rank of average crimes per day by area and crime code"),
-        ALTER COLUMN rank_avg_crimes_per_day_by_area_age SET OPTIONS (description="Rank of average crimes per day by area and age group"),
-        ALTER COLUMN prev_month_avg_crimes_per_day_by_area SET OPTIONS (description="Previous month average crimes per day by area"),
-        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Previous month average crimes per day by area and crime code"),
-        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_age SET OPTIONS (description="Previous month average crimes per day by area and age group"),
-        ALTER COLUMN corr_crime_count_area SET OPTIONS (description="Correlation between crime count and area"),
-        ALTER COLUMN corr_crime_code_area SET OPTIONS (description="Correlation between crime code and area"),
-        ALTER COLUMN corr_crime_count_age_group SET OPTIONS (description="Correlation between crime count and age group"),
-        ALTER COLUMN crm_cd_desc SET OPTIONS (description="Crime description"),
-        ALTER COLUMN area_name SET OPTIONS (description="Area name"),
-        ALTER COLUMN geo_display_name SET OPTIONS (description="Geographical display name"),
-        ALTER COLUMN pct_change_avg_crimes_per_day_by_area SET OPTIONS (description="Percentage change in average crimes per day by area"),
-        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_crmcd SET OPTIONS (description="Percentage change in average crimes per day by area and crime code"),
-        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_age SET OPTIONS (description="Percentage change in average crimes per day by area and age group"),
-        ALTER COLUMN avg_crimes_per_day_by_area_ranking SET OPTIONS (description="Ranking of average crimes per day by area"),
-        ALTER COLUMN avg_crimes_per_day_by_area_crmcd_ranking SET OPTIONS (description="Ranking of average crimes per day by area and crime code"),
-        ALTER COLUMN crime_score SET OPTIONS (description="Crime score"),
-        ALTER COLUMN crime_score_by_crmcd SET OPTIONS (description="Crime score by crime code"),
-        ALTER COLUMN crime_score_by_age_group SET OPTIONS (description="Crime score by age group"),
-        ALTER COLUMN corr_crime_count_age_group_strength SET OPTIONS (description="Correlation strength between crime count and age group"),
-        ALTER COLUMN crime_density SET OPTIONS (description="Crime density"),
-        ALTER COLUMN crime_severity SET OPTIONS (description="Crime severity"),
-        ALTER COLUMN is_crime_violent SET OPTIONS (description="Is crime violent")
+        ALTER COLUMN dateyear_occ                                   SET OPTIONS (description="Year of occurrence"),
+        ALTER COLUMN datemon_occ                                    SET OPTIONS (description="Month of occurrence"),
+        ALTER COLUMN lat                                            SET OPTIONS (description="Latitude"),
+        ALTER COLUMN lon                                            SET OPTIONS (description="Longitude"),
+        ALTER COLUMN area_id                                        SET OPTIONS (description="Area ID"),
+        ALTER COLUMN vict_age_group                                 SET OPTIONS (description="Victim age group"),
+        ALTER COLUMN fk_crm_cd                                      SET OPTIONS (description="Crime code"),
+        ALTER COLUMN crime_count                                    SET OPTIONS (description="Count of crimes"),
+        ALTER COLUMN avg_crimes_per_day                             SET OPTIONS (description="Average crimes per day"),
+        ALTER COLUMN rank_avg_crimes_per_day_by_area                SET OPTIONS (description="Rank of average crimes per day by area"),
+        ALTER COLUMN rank_avg_crimes_per_day_by_area_crmcd          SET OPTIONS (description="Rank of average crimes per day by area and crime code"),
+        ALTER COLUMN rank_avg_crimes_per_day_by_area_age            SET OPTIONS (description="Rank of average crimes per day by area and age group"),
+        ALTER COLUMN prev_month_avg_crimes_per_day_by_area          SET OPTIONS (description="Previous month average crimes per day by area"),
+        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_crmcd    SET OPTIONS (description="Previous month average crimes per day by area and crime code"),
+        ALTER COLUMN prev_month_avg_crimes_per_day_by_area_age      SET OPTIONS (description="Previous month average crimes per day by area and age group"),
+        ALTER COLUMN corr_crime_count_area                          SET OPTIONS (description="Correlation between crime count and area"),
+        ALTER COLUMN corr_crime_code_area                           SET OPTIONS (description="Correlation between crime code and area"),
+        ALTER COLUMN corr_crime_count_age_group                     SET OPTIONS (description="Correlation between crime count and age group"),
+        ALTER COLUMN crm_cd_desc                                    SET OPTIONS (description="Crime description"),
+        ALTER COLUMN area_name                                      SET OPTIONS (description="Area name"),
+        ALTER COLUMN geo_display_name                               SET OPTIONS (description="Geographical display name"),
+        ALTER COLUMN pct_change_avg_crimes_per_day_by_area          SET OPTIONS (description="Percentage change in average crimes per day by area"),
+        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_crmcd    SET OPTIONS (description="Percentage change in average crimes per day by area and crime code"),
+        ALTER COLUMN pct_change_avg_crimes_per_day_by_area_age      SET OPTIONS (description="Percentage change in average crimes per day by area and age group"),
+        ALTER COLUMN avg_crimes_per_day_by_area_ranking             SET OPTIONS (description="Ranking of average crimes per day by area"),
+        ALTER COLUMN avg_crimes_per_day_by_area_crmcd_ranking       SET OPTIONS (description="Ranking of average crimes per day by area and crime code"),
+        ALTER COLUMN crime_score                                    SET OPTIONS (description="Crime score"),
+        ALTER COLUMN crime_score_by_crmcd                           SET OPTIONS (description="Crime score by crime code"),
+        ALTER COLUMN crime_score_by_age_group                       SET OPTIONS (description="Crime score by age group"),
+        ALTER COLUMN corr_crime_count_age_group_strength            SET OPTIONS (description="Correlation strength between crime count and age group"),
+        ALTER COLUMN crime_density                                  SET OPTIONS (description="Crime density"),
+        ALTER COLUMN crime_severity                                 SET OPTIONS (description="Crime severity"),
+        ALTER COLUMN is_crime_violent                               SET OPTIONS (description="Is crime violent"),
+        ALTER COLUMN population                                     SET OPTIONS (description="Population from FCC see https://geo.fcc.gov/api/census/#!/area/get_area")
 ;
