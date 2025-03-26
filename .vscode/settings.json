@@ -1,7 +1,7 @@
 {
     "sqltools.useNodeRuntime": true,
     "files.associations": {
-        "*.bqsql": "sql-bigquery",
+        "*.bqsql": "bigquery",
         "*.sql": "sql",
         "*.mysql": "mysql",
         "*.pgsql": "pgsql"

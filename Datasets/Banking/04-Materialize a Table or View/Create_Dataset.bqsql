@@ -1,0 +1,92 @@
+CREATE OR REPLACE TABLE mikecancell-development.Datasets.Banking_Data AS
+WITH 
+    ages AS
+    (
+        SELECT
+            Age,
+            Age_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_age
+    ),
+    contacts AS
+    (
+        SELECT
+            Contacts_Count,
+            Contacts_Count_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_contact
+    ),
+    credit_limits AS
+    (
+        SELECT
+            Credit_Limit,
+            Credit_Limit_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_credit_limits
+    ),
+    inactivity AS
+    (
+        SELECT
+            Months_Inactive,
+            Months_Inactive_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_inactive
+    ),
+    naive_bayes AS
+    (
+        SELECT
+            Naive_Bayes,
+            Naive_Bayes_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_naive_bayes
+    ),
+    revolving_balances AS
+    (
+        SELECT
+            Total_Revolving_Bal,
+            Revolving_Bal_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_revolving_bal
+    ),
+    transaction_amts AS
+    (
+        SELECT
+            Total_Trans_Amt,
+            Total_Trans_Amt_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_trans_amt
+    ),
+    transaction_cnts AS
+    (
+        SELECT
+            Total_Trans_Ct,
+            Total_Trans_Ct_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_trans_cnt
+    ),
+    utilization AS
+    (
+        SELECT
+            Avg_Utilization_Ratio,
+            Utilization_Ratio_Group
+        FROM mikecancell-development.Datasets.Banking_Data_dim_utilization
+    ),
+    bank_facts AS
+    (
+        SELECT
+            *
+        FROM mikecancell-development.Datasets.Banking_Data_fact_table
+    )
+SELECT
+    bank_facts.*,
+    ages.Age_Group, 
+    contacts.Contacts_Count_Group,
+    credit_limits.Credit_Limit_Group,
+    inactivity.Months_Inactive_Group,
+    naive_bayes.Naive_Bayes_Group,
+    revolving_balances.Revolving_Bal_Group,
+    transaction_amts.Total_Trans_Amt_Group,
+    transaction_cnts.Total_Trans_Ct_Group,
+    utilization.Utilization_Ratio_Group
+FROM bank_facts
+JOIN ages ON bank_facts.Age = ages.Age
+JOIN contacts ON bank_facts.Contacts_Count_12_mon = contacts.Contacts_Count 
+JOIN credit_limits ON bank_facts.Credit_Limit = credit_limits.Credit_Limit
+JOIN inactivity ON bank_facts.Months_Inactive_12_mon = inactivity.Months_Inactive
+JOIN naive_bayes ON bank_facts.Naive_Bayes = naive_bayes.Naive_Bayes
+JOIN revolving_balances ON bank_facts.Total_Revolving_Bal = revolving_balances.Total_Revolving_Bal
+JOIN transaction_amts ON bank_facts.Total_Trans_Amt = transaction_amts.Total_Trans_Amt
+JOIN transaction_cnts ON bank_facts.Total_Trans_Ct = transaction_cnts.Total_Trans_Ct
+JOIN utilization ON bank_facts.Avg_Utilization_Ratio = utilization.Avg_Utilization_Ratio
