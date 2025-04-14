@@ -1,10 +1,13 @@
 WITH 
+    -- Create a dimension table for taxis with unique taxi IDs and their associated companies
     dim_taxis AS (
         SELECT DISTINCT
             taxi_id,
             company
         FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
     ),
+
+    -- Create a dimension table for unique pickup and dropoff locations (latitude and longitude)
     dim_locations AS (
         SELECT DISTINCT
             locations.latitude,
@@ -21,6 +24,8 @@ WITH
             FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
         ) AS locations
     ),
+
+    -- Create a dimension table for geographic census data, mapping locations to city and population
     dim_geo_census_data AS (
         SELECT DISTINCT
             geo.latitude AS fk_latitude,
@@ -42,6 +47,8 @@ WITH
         ON ABS(geo.latitude - coords.latitude) < 0.05 
         AND ABS(geo.longitude - coords.longitude) < 0.05
     ),
+
+    -- Create a dimension table for payment types with descriptions for each payment type
     dim_payment_types AS (
         SELECT DISTINCT
             payment_type,
@@ -61,6 +68,8 @@ WITH
             END AS payment_type_desc
         FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
     ),
+
+    -- Create a fact table for trips, aggregating trip details and metrics
     trip_facts AS (
         SELECT DISTINCT
             taxi_id,
@@ -101,6 +110,7 @@ WITH
         # DEBUG LIMIT 1000
     )
 
+-- Main query to combine all dimensions and facts into a single result set
 SELECT DISTINCT
     facts.*,
     taxis.company AS taxi_company,
