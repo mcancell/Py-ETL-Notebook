@@ -1,0 +1,123 @@
+WITH 
+    dim_taxis AS (
+        SELECT DISTINCT
+            taxi_id,
+            company
+        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+    ),
+    dim_locations AS (
+        SELECT DISTINCT
+            locations.latitude,
+            locations.longitude
+        FROM (
+            SELECT 
+            pickup_latitude AS latitude,
+            pickup_longitude AS longitude
+            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            UNION DISTINCT
+            SELECT 
+            dropoff_latitude AS latitude,
+            dropoff_longitude AS longitude
+            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        ) AS locations
+    ),
+    dim_geo_census_data AS (
+        SELECT DISTINCT
+            geo.latitude AS fk_latitude,
+            geo.longitude AS fk_longitude, 
+            geo.city AS sub_city,
+            geo.population AS sub_population
+        FROM `mikecancell-development.Chicago_Taxi_Trips.Geo_Locations` AS geo
+        JOIN (
+            SELECT DISTINCT 
+                ROUND(pickup_latitude, 4) AS latitude, 
+                ROUND(pickup_longitude, 4) AS longitude
+            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            UNION DISTINCT
+            SELECT DISTINCT 
+                ROUND(dropoff_latitude, 4) AS latitude, 
+                ROUND(dropoff_longitude, 4) AS longitude
+            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        ) AS coords
+        ON ABS(geo.latitude - coords.latitude) < 0.05 
+        AND ABS(geo.longitude - coords.longitude) < 0.05
+    ),
+    dim_payment_types AS (
+        SELECT DISTINCT
+            payment_type,
+            CASE 
+            WHEN payment_type = 'Mobile' THEN 'Payment made via Mobile application'
+            WHEN payment_type = 'Way2ride' THEN 'Payment made using Way2ride service'
+            WHEN payment_type = 'No Charge' THEN 'No charge applied for the trip'
+            WHEN payment_type = 'Dispute' THEN 'Payment disputed by the customer'
+            WHEN payment_type = 'Credit Card' THEN 'Payment made using a Credit Card'
+            WHEN payment_type = 'Cash' THEN 'Payment made in Cash'
+            WHEN payment_type = 'Unknown' THEN 'Payment type is Unknown'
+            WHEN payment_type = 'Prcard' THEN 'Payment made using Procurement Card (Prcard)'
+            WHEN payment_type = 'Split' THEN 'Payment split between multiple parties'
+            WHEN payment_type = 'Pcard' THEN 'Payment made using a purchasing card, e.g., company-issued for business purchases'
+            WHEN payment_type = 'Prepaid' THEN 'Payment made using Prepaid method'
+            ELSE 'Other payment method used'
+            END AS payment_type_desc
+        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+    ),
+    trip_facts AS (
+        SELECT DISTINCT
+            taxi_id,
+            CAST(DATE_TRUNC(trip_start_timestamp, MONTH) AS DATE) AS trip_start_month,
+            CAST(DATE_TRUNC(trip_end_timestamp, MONTH) AS DATE)   AS trip_end_month,
+            SUM(trip_seconds) AS total_trip_seconds,
+            SUM(trip_miles)   AS total_trip_miles,
+            pickup_census_tract,
+            dropoff_census_tract,
+            pickup_community_area,
+            dropoff_community_area,
+            SUM(fare) AS total_fare,
+            SUM(tips)  AS total_tip,
+            SUM(tolls) AS total_toll,
+            SUM(Extras) AS total_extras,
+            SUM(Trip_total) AS total_trip_total,
+            payment_type,
+            pickup_latitude,
+            pickup_longitude,
+            dropoff_latitude,
+            dropoff_longitude
+        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        GROUP BY
+            taxi_id,
+            trip_start_month,
+            trip_end_month,
+            pickup_census_tract,
+            dropoff_census_tract,
+            pickup_community_area,
+            dropoff_community_area,
+            payment_type,
+            pickup_latitude,
+            pickup_longitude,
+            dropoff_latitude,
+            dropoff_longitude
+        HAVING 
+            trip_start_month >= DATE_SUB(CURRENT_DATE(), INTERVAL 24 MONTH)
+        # DEBUG LIMIT 1000
+    )
+
+SELECT DISTINCT
+    facts.*,
+    taxis.company AS taxi_company,
+    pickup_geo.sub_city AS pickup_sub_city,
+    pickup_geo.sub_population AS pickup_sub_population,
+    dropoff_geo.sub_city AS dropoff_sub_city,
+    dropoff_geo.sub_population AS dropoff_sub_population,
+    payment.payment_type_desc AS payment_type_desc
+FROM trip_facts AS facts
+LEFT JOIN dim_taxis AS taxis ON 
+    facts.taxi_id = taxis.taxi_id
+LEFT JOIN dim_geo_census_data AS pickup_geo ON 
+        ABS(facts.pickup_latitude - pickup_geo.fk_latitude) < 0.05
+    AND ABS(facts.pickup_longitude - pickup_geo.fk_longitude) < 0.05
+LEFT JOIN dim_geo_census_data AS dropoff_geo ON 
+        ABS(facts.dropoff_latitude - dropoff_geo.fk_latitude) < 0.05
+    AND ABS(facts.dropoff_longitude - dropoff_geo.fk_longitude) < 0.05
+LEFT JOIN dim_payment_types AS payment ON 
+        facts.payment_type = payment.payment_type
+
