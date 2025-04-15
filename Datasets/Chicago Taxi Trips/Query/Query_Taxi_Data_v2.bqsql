@@ -1,0 +1,162 @@
+WITH 
+    MoM_Trip_Increases AS (
+    /* 
+        This CTE calculates the month-over-month (MoM) trip increases for each taxi company. 
+        It groups trips by company and month, computes the total trips (metric), and calculates the difference 
+        (metric_delta) compared to the previous month using the LAG function.
+    */        SELECT
+            company,
+            FORMAT_TIMESTAMP('%Y-%m', trip_start_timestamp) AS trip_month,
+            COUNT(*) AS metric,
+            COUNT(*) - LAG(COUNT(*)) OVER (PARTITION BY company ORDER BY trip_start_timestamp) AS metric_delta
+        FROM
+            `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+        WHERE 
+            company IS NOT NULL
+        GROUP BY
+            company, 
+            trip_start_timestamp
+    ),
+    
+    MoM_FarePerMile_Decreases AS (
+    /* 
+        This CTE calculates the month-over-month (MoM) fare-per-mile decreases for each taxi company. 
+        It groups trips by company and month, computes the average fare-per-mile (metric), and calculates the difference 
+        (metric_delta) compared to the previous month using the LAG function.
+    */        
+    SELECT
+        company,
+        FORMAT_TIMESTAMP('%Y-%m', trip_start_timestamp) AS trip_month,
+        SAFE_DIVIDE(SUM(fare), SUM(trip_miles)) AS metric,
+        SAFE_DIVIDE(SUM(fare), SUM(trip_miles)) - LAG(SAFE_DIVIDE(SUM(fare), SUM(trip_miles))) OVER (PARTITION BY company ORDER BY trip_start_timestamp) AS metric_delta
+    FROM
+        `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+    WHERE 
+        company IS NOT NULL
+        AND trip_miles > 0  -- Exclude trips with zero miles to avoid division by zero
+    GROUP BY
+        company, 
+        trip_start_timestamp
+    ),
+
+    MoM_Trip_Increases_Ranked AS (
+    /* 
+        This CTE ranks the month-over-month trip increases for each company. 
+        It assigns a rank to each increase based on the magnitude of the metric_delta in descending order.
+    */
+        SELECT
+            company,
+            trip_month,
+            metric,
+            metric_delta,
+            ROW_NUMBER() OVER (PARTITION BY company ORDER BY metric_delta DESC) AS rank
+        FROM
+            MoM_Trip_Increases
+        WHERE
+            metric_delta > 0  -- Only consider increases
+    ),
+    
+    MoM_FarePerMile_Decreases_Ranked AS (
+    /* 
+        This CTE ranks the month-over-month fare-per-mile decreases for each company. 
+        It assigns a rank to each decrease based on the magnitude of the metric_delta in ascending order.
+    */
+        SELECT
+            company,
+            trip_month,
+            metric,
+            metric_delta,
+            ROW_NUMBER() OVER (PARTITION BY company ORDER BY metric_delta ASC) AS rank
+        FROM
+            MoM_FarePerMile_Decreases
+        WHERE
+            metric_delta < 0  -- Only consider decreases
+    ),
+    
+    Top_Trip_Increase_Insights AS (
+    /* 
+        This CTE identifies the top 3 companies with the largest month-over-month trip increases. 
+        It calculates additional insights such as the percentage change and categorizes the increases into descriptive insights.
+    */
+        SELECT
+            b.*,
+            CASE
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) BETWEEN 0 AND .10 THEN "Minimal Increase in Trips May Suggest Seasonal or Random Fluctuation"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .10 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= .30 THEN "Moderate Increase in Trips May Indicate Growing Demand or Fleet Expansion"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .30 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= .60 THEN "Significant Increase in Trips May Suggest Aggressive Business Growth or Market Expansion"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .60 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= 1.0 THEN "Very High Increase in Trips May Indicate New Business Gaining Traction Rapidly"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > 1.0 THEN "Exceptional Increase in Trips May Suggest a Major Market Disruption or New Entrant with High Growth"
+            END AS Metric_Insight
+        FROM
+        (
+            SELECT
+                a.Metric_Description,
+                a.Taxi_Company,
+                a.Trip_Month,
+                a.Mon_Metric_Val - Metric_Delta AS Prior_Mon_Metric_Val,
+                a.Mon_Metric_Val,
+                a.Metric_Delta,
+                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change
+            FROM (
+                SELECT
+                    'Largest Month-Over-Month Increase in Trips' AS Metric_Description,
+                    company AS Taxi_Company,
+                    trip_month AS Trip_Month,
+                    metric AS Mon_Metric_Val,
+                    metric_delta AS Metric_Delta,
+                    ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank
+                FROM
+                    MoM_Trip_Increases_Ranked
+                WHERE
+                    rank = 1  -- Get the largest decrease for each company
+            ) a
+            WHERE
+                overall_rank <= 3  -- Get the top 3 unique companies
+        ) b
+    ),
+
+    Top_FarePerMile_Decrease_Insights AS (
+    /* 
+        This CTE identifies the top 3 companies with the largest month-over-month fare-per-mile decreases. 
+        It calculates additional insights such as the percentage change and categorizes the decreases into descriptive insights.
+    */
+        SELECT
+            b.*,
+            CASE
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) BETWEEN -0.10 AND 0 THEN "Minimal Decrease in Fare Per Mile May Suggest Seasonal or Random Fluctuation"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -0.10 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) >= -0.30 THEN "Moderate Decrease in Fare Per Mile May Indicate Competitive Pricing or Market Adjustment"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -0.30 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) >= -0.60 THEN "Significant Decrease in Fare Per Mile May Suggest Aggressive Pricing Strategy or Cost Reduction"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -0.60 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) >= -1.0 THEN "Very High Decrease in Fare Per Mile May Indicate Drastic Market Changes or New Competition"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -1.0 THEN "Exceptional Decrease in Fare Per Mile May Suggest Major Market Disruption or Strategic Overhaul"
+            END AS Metric_Insight
+        FROM
+        (
+            SELECT
+                a.Metric_Description,
+                a.Taxi_Company,
+                a.Trip_Month,
+                a.Mon_Metric_Val - Metric_Delta AS Prior_Mon_Metric_Val,
+                a.Mon_Metric_Val,
+                a.Metric_Delta,
+                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change
+            FROM (
+                SELECT
+                    'Largest Month-Over-Month Decrease in Fare Per Mile' AS Metric_Description,
+                    company AS Taxi_Company,
+                    trip_month AS Trip_Month,
+                    metric AS Mon_Metric_Val,
+                    metric_delta AS Metric_Delta,
+                    ROW_NUMBER() OVER (ORDER BY metric_delta ASC) AS overall_rank
+                FROM
+                    MoM_FarePerMile_Decreases_Ranked
+                WHERE
+                    rank = 1  -- Get the largest decrease for each company
+            ) a
+            WHERE
+                overall_rank <= 3  -- Get the top 3 unique companies
+        ) b
+    )
+-- END CTEs
+SELECT * FROM Top_Trip_Increase_Insights
+UNION ALL
+SELECT * FROM Top_FarePerMile_Decrease_Insights
