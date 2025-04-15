@@ -1,84 +1,62 @@
 WITH
-    -- Calculate Month-over-Month Trip Increases
+    -- Precompute Overall Averages
+    Overall_Avg_Fare AS (
+        SELECT AVG(fare) AS Metric_Avg_All_Trips FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` WHERE fare IS NOT NULL
+    ),
+    Overall_Avg_Trip_Duration AS (
+        SELECT AVG(trip_seconds) / 60 AS Metric_Avg_All_Trips FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` WHERE trip_seconds IS NOT NULL
+    ),
+
     -- Calculate Month-over-Month Average Fare Decreases by City
-    MoM_Avg_Trip_Fare_Decreases_by_City AS (
+    MoM_Avg_Trip_Fare_Decreases_by_City_PreFiltered AS (
         SELECT 
-            -- Combine company name and city for more granular insights
-            CONCAT(a.company, " - ", a.city) AS company,
-            a.trip_month,
-            a.metric,
-            a.metric_delta,
-            a.Metric_Avg_All_Trips,
-            a.Metric_Avg_By_Company
-        FROM (
-            SELECT
-            trips.company, -- Taxi company name
-            geo.city, -- City derived from geolocation
-            FORMAT_TIMESTAMP('%Y-%m', trips.trip_start_timestamp) AS trip_month, -- Extract year and month from trip start timestamp
-            AVG(trips.fare) AS metric, -- Calculate average fare for the month
-            ROUND(AVG(trips.fare) - LAG(AVG(trips.fare)) OVER (PARTITION BY trips.company ORDER BY trips.trip_start_timestamp), 2) AS metric_delta, -- Month-over-month change in average fare, rounded to 2 decimal places
-            AVG(AVG(trips.fare)) OVER() AS Metric_Avg_All_Trips, -- Overall average fare across all companies and trips
-            AVG(AVG(trips.fare)) OVER (PARTITION BY company) AS Metric_Avg_By_Company -- Average fare for each company across all months
-            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` trips
-            LEFT JOIN `mikecancell-development.Chicago_Taxi_Trips.Geo_Locations` AS geo
-            ON
-            -- Match trips to geolocation data based on proximity of latitude and longitude
-            ABS(geo.latitude - trips.pickup_latitude) < 0.05 
-            AND ABS(geo.longitude - trips.pickup_longitude) < 0.05
-            WHERE
-            company IS NOT NULL -- Exclude trips with no company information
-            AND trip_seconds IS NOT NULL -- Exclude trips with no duration
-            AND fare IS NOT NULL -- Exclude trips with no fare information
-            GROUP BY
-            company,
-            trip_start_timestamp,
-            geo.city -- Group by city to calculate city-specific metrics
-        ) a
-        WHERE
-            ABS(metric_delta) > 0.01 -- Filter out insignificant changes in average fare
+            "Largest Month-Over-Month Decrease in Average Fare by City/Area" AS Metric_Description,
+            CONCAT(trips.company, " - ", geo.city) AS company,
+            FORMAT_TIMESTAMP('%Y-%m', trips.trip_start_timestamp) AS trip_month,
+            AVG(trips.fare) AS metric,
+            ROUND(AVG(trips.fare) - LAG(AVG(trips.fare)) OVER (PARTITION BY trips.company ORDER BY trips.trip_start_timestamp), 2) AS metric_delta,
+            (SELECT Metric_Avg_All_Trips FROM Overall_Avg_Fare LIMIT 1) AS Metric_Avg_All_Trips, -- Use precomputed overall average
+            AVG(trips.fare) AS Metric_Avg_By_Company -- Precompute company-specific average
+        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` trips
+        LEFT JOIN `mikecancell-development.Chicago_Taxi_Trips.Geo_Locations` AS geo
+        ON ABS(geo.latitude - trips.pickup_latitude) < 0.05 AND ABS(geo.longitude - trips.pickup_longitude) < 0.05
+        WHERE trips.company IS NOT NULL AND trips.trip_seconds IS NOT NULL AND trips.fare IS NOT NULL
+        GROUP BY trips.company, trips.trip_start_timestamp, geo.city
+    ),
+
+    MoM_Avg_Trip_Fare_Decreases_by_City AS (
+        SELECT *
+        FROM MoM_Avg_Trip_Fare_Decreases_by_City_PreFiltered
+        WHERE ABS(metric_delta) > 0.01 -- Filter out insignificant changes
     ),
 
     -- Calculate Month-over-Month Average Trip Duration Decreases by City
-    MoM_Avg_Trip_Dur_Decreases_by_City AS (
+    MoM_Avg_Trip_Dur_Decreases_by_City_PreFiltered AS (
         SELECT 
-            -- Combine company name and city for more granular insights
-            CONCAT(a.company, " - ", a.city) AS company,
-            a.trip_month,
-            a.metric,
-            a.metric_delta,
-            a.Metric_Avg_All_Trips,
-            a.Metric_Avg_By_Company
-        FROM (
-            SELECT
-            trips.company, -- Taxi company name
-            geo.city, -- City derived from geolocation
-            FORMAT_TIMESTAMP('%Y-%m', trips.trip_start_timestamp) AS trip_month, -- Extract year and month from trip start timestamp
-            AVG(trips.trip_seconds) / 60 AS metric, -- Calculate average trip duration in minutes for the month
-            ROUND(AVG(trips.trip_seconds) / 60 - LAG(AVG(trips.trip_seconds) / 60) OVER (PARTITION BY trips.company ORDER BY trips.trip_start_timestamp), 2) AS metric_delta, -- Month-over-month change in average trip duration, rounded to 2 decimal places
-            AVG(AVG(trips.trip_seconds) / 60) OVER() AS Metric_Avg_All_Trips, -- Overall average trip duration across all companies and trips
-            AVG(AVG(trips.trip_seconds) / 60) OVER (PARTITION BY company) AS Metric_Avg_By_Company -- Average trip duration for each company across all months
-            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` trips
-            LEFT JOIN `mikecancell-development.Chicago_Taxi_Trips.Geo_Locations` AS geo
-            ON
-            -- Match trips to geolocation data based on proximity of latitude and longitude
-            ABS(geo.latitude - trips.pickup_latitude) < 0.05 
-            AND ABS(geo.longitude - trips.pickup_longitude) < 0.05
-            WHERE
-            company IS NOT NULL -- Exclude trips with no company information
-            AND trip_seconds IS NOT NULL -- Exclude trips with no duration
-            AND fare IS NOT NULL -- Exclude trips with no fare information
-            GROUP BY
-            company,
-            trip_start_timestamp,
-            geo.city -- Group by city to calculate city-specific metrics
-        ) a
-        WHERE
-            ABS(metric_delta) > 0.01 -- Filter out insignificant changes in average trip duration
+            "Largest Month-Over-Month Decrease in Average Trip Duration by City/Area" AS Metric_Description,
+            CONCAT(trips.company, " - ", geo.city) AS company,
+            FORMAT_TIMESTAMP('%Y-%m', trips.trip_start_timestamp) AS trip_month,
+            AVG(trips.trip_seconds) / 60 AS metric,
+            ROUND(AVG(trips.trip_seconds) / 60 - LAG(AVG(trips.trip_seconds) / 60) OVER (PARTITION BY trips.company ORDER BY trips.trip_start_timestamp), 2) AS metric_delta,
+            (SELECT Metric_Avg_All_Trips FROM Overall_Avg_Trip_Duration LIMIT 1) AS Metric_Avg_All_Trips, -- Use precomputed overall average
+            AVG(trips.trip_seconds) / 60 AS Metric_Avg_By_Company -- Precompute company-specific average
+        FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips` trips
+        LEFT JOIN `mikecancell-development.Chicago_Taxi_Trips.Geo_Locations` AS geo
+        ON ABS(geo.latitude - trips.pickup_latitude) < 0.05 AND ABS(geo.longitude - trips.pickup_longitude) < 0.05
+        WHERE trips.company IS NOT NULL AND trips.trip_seconds IS NOT NULL
+        GROUP BY trips.company, trips.trip_start_timestamp, geo.city
+    ),
+
+    MoM_Avg_Trip_Dur_Decreases_by_City AS (
+        SELECT *
+        FROM MoM_Avg_Trip_Dur_Decreases_by_City_PreFiltered
+        WHERE ABS(metric_delta) > 0.01 -- Filter out insignificant changes
     ),
 
     -- Rank Companies by Largest Decrease in Average Fare Per Trip
     MoM_Avg_Trip_Fare_Decreases_Ranked AS (
         SELECT
+            Metric_Description, -- Include Metric_Description
             company,
             trip_month,
             metric,
@@ -86,15 +64,13 @@ WITH
             Metric_Avg_All_Trips,
             Metric_Avg_By_Company,
             ROW_NUMBER() OVER (PARTITION BY company ORDER BY metric_delta DESC) AS rank
-        FROM
-            MoM_Avg_Trip_Fare_Decreases_by_City
-        WHERE
-            metric_delta < 0  -- Only consider decreases
+        FROM MoM_Avg_Trip_Fare_Decreases_by_City
     ),
 
     -- Rank Companies by Largest Decrease in Average Trip Duration
     MoM_Avg_Trip_Dur_Decreases_Ranked AS (
         SELECT
+            Metric_Description, -- Include Metric_Description
             company,
             trip_month,
             metric,
@@ -102,31 +78,28 @@ WITH
             Metric_Avg_All_Trips,
             Metric_Avg_By_Company,
             ROW_NUMBER() OVER (PARTITION BY company ORDER BY metric_delta DESC) AS rank
-        FROM
-            MoM_Avg_Trip_Dur_Decreases
-        WHERE
-            metric_delta < 0  -- Only consider decreases
+        FROM MoM_Avg_Trip_Dur_Decreases_by_City
     ),
 
+    -- Insights for Fare Decreases
     Top_Fare_Decrease_Insights AS (
-       SELECT
+        SELECT
             b.*,
             CASE
-                WHEN Prior_Mon_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights"
+                WHEN Prior_Mon_Metric_Val IS NULL THEN "No prior data available to calculate insights for the city/area."
                 ELSE CONCAT(
-                    "Current trips are ",
+                    "The current average fare is ",
                     FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
                     "x the overall average and ",
                     FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
-                    "x the company average. ",
-                    "Variance from overall average trips is ",
+                    "x the company's average for the city/area. ",
+                    "The variance from the overall average fare is ",
                     FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
                     ". ",
-                    "Potential reasons could include seasonal changes, marketing campaigns, or operational adjustments."
+                    "Potential reasons could include city-specific seasonal changes, marketing campaigns, or operational adjustments."
                 )
             END AS Metric_Insight
-        FROM
-        (
+        FROM (
             SELECT
                 a.*,
                 a.Mon_Metric_Val - a.Metric_Delta AS Prior_Mon_Metric_Val,
@@ -134,7 +107,7 @@ WITH
                 CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change_Str
             FROM (
                 SELECT
-                    'Largest Month-Over-Month Decrease in Average Fare' AS Metric_Description,
+                    Metric_Description,
                     company AS Taxi_Company,
                     trip_month AS Trip_Month,
                     metric AS Mon_Metric_Val,
@@ -142,36 +115,32 @@ WITH
                     Metric_Avg_All_Trips,
                     Metric_Avg_By_Company,
                     ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank
-                FROM
-                    MoM_Avg_Trip_Fare_Decreases_Ranked
-                WHERE
-                    rank = 1
+                FROM MoM_Avg_Trip_Fare_Decreases_Ranked
+                WHERE rank = 1
             ) a
-            WHERE
-                overall_rank <= 3
-        ) b        
-    )
-SELECT * FROM Top_Fare_Decrease_Insights;
+            WHERE overall_rank <= 3
+        ) b
+    ),
 
+    -- Insights for Trip Duration Decreases
     Top_Trip_Dur_Decreases AS (
-       SELECT
+        SELECT
             b.*,
             CASE
-                WHEN Prior_Mon_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights"
+                WHEN Prior_Mon_Metric_Val IS NULL THEN "No prior data available to calculate insights for the city/area."
                 ELSE CONCAT(
-                    "Current trips are ",
+                    "The current average trip duration is ",
                     FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
                     "x the overall average and ",
                     FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
-                    "x the company average. ",
-                    "Variance from overall average trips is ",
+                    "x the company's average for the city/area. ",
+                    "The variance from the overall average trip duration is ",
                     FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
                     ". ",
-                    "Potential reasons could include seasonal changes, marketing campaigns, or operational adjustments."
+                    "Potential reasons could include city-specific seasonal changes, marketing campaigns, or operational adjustments."
                 )
             END AS Metric_Insight
-        FROM
-        (
+        FROM (
             SELECT
                 a.*,
                 a.Mon_Metric_Val - a.Metric_Delta AS Prior_Mon_Metric_Val,
@@ -179,7 +148,7 @@ SELECT * FROM Top_Fare_Decrease_Insights;
                 CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change_Str
             FROM (
                 SELECT
-                    'Largest Month-Over-Month Increase in Trips' AS Metric_Description,
+                    Metric_Description,
                     company AS Taxi_Company,
                     trip_month AS Trip_Month,
                     metric AS Mon_Metric_Val,
@@ -187,25 +156,14 @@ SELECT * FROM Top_Fare_Decrease_Insights;
                     Metric_Avg_All_Trips,
                     Metric_Avg_By_Company,
                     ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank
-                FROM
-                    MoM_Avg_Trip_Dur_Decreases_Ranked
-                WHERE
-                    rank = 1
+                FROM MoM_Avg_Trip_Dur_Decreases_Ranked
+                WHERE rank = 1
             ) a
-            WHERE
-                overall_rank <= 3
-        ) b   
+            WHERE overall_rank <= 3
+        ) b
     )
 
 -- Combine Insights
-SELECT 
-    company,
-    avg_fare_per_trip,
-    insight
-FROM Top_Fare_Insights
+SELECT * FROM Top_Fare_Decrease_Insights
 UNION ALL
-SELECT 
-    company,
-    NULL AS avg_fare_per_trip,  -- Here we keep the same type consistency in the second SELECT
-    insight
-FROM Top_Duration_Insights;
+SELECT * FROM Top_Trip_Dur_Decreases;
