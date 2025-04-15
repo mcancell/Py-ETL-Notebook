@@ -100,18 +100,68 @@ WITH
         FROM MoM_Avg_Trip_Dur_Decreases_by_City
     ),
 
-    -- Top 3 Insights for Fare Decreases
+    -- Top 3 Insights for Fare Decreases with Formatted Insights
     Top_Fare_Decrease_Insights AS (
-        SELECT *
-        FROM MoM_Avg_Trip_Fare_Decreases_Ranked
-        WHERE rank <= 3 -- Select top 3 globally
+        SELECT
+            b.*,
+            CASE
+                WHEN Prior_Mon_Metric_Val IS NULL THEN "No prior data available to calculate insights for the city/area."
+                ELSE CONCAT(
+                    "The current average fare is ",
+                    FORMAT('%.1f', SAFE_DIVIDE(b.metric, b.Metric_Avg_All_Trips)), -- Use `metric` for the current month's value
+                    "x the overall average and ",
+                    FORMAT('%.1f', SAFE_DIVIDE(b.metric, b.Metric_Avg_By_Company)),
+                    "x the company's average for the city/area. ",
+                    "The variance from the overall average fare is ",
+                    FORMAT('%.1f', b.metric - b.Metric_Avg_All_Trips),
+                    ". ",
+                    "Potential reasons could include city-specific seasonal changes, marketing campaigns, or operational adjustments."
+                )
+            END AS Metric_Insight
+        FROM (
+            SELECT
+                a.*,
+                a.metric - a.metric_delta AS Prior_Mon_Metric_Val,
+                ROUND(SAFE_DIVIDE(a.metric_delta, (a.metric - a.metric_delta)), 3) AS Percent_Change,
+                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.metric_delta, (a.metric - a.metric_delta)) * 100), '%') AS Percent_Change_Str
+            FROM (
+                SELECT *
+                FROM MoM_Avg_Trip_Fare_Decreases_Ranked
+                WHERE rank <= 3 -- Select top 3 globally
+            ) a
+        ) b
     ),
 
-    -- Top 3 Insights for Trip Duration Decreases
+    -- Top 3 Insights for Trip Duration Decreases with Formatted Insights
     Top_Trip_Dur_Decreases AS (
-        SELECT *
-        FROM MoM_Avg_Trip_Dur_Decreases_Ranked
-        WHERE rank <= 3 -- Select top 3 globally
+        SELECT
+            b.*,
+            CASE
+                WHEN Prior_Mon_Metric_Val IS NULL THEN "No prior data available to calculate insights for the city/area."
+                ELSE CONCAT(
+                    "The current average trip duration is ",
+                    FORMAT('%.1f', SAFE_DIVIDE(b.metric, b.Metric_Avg_All_Trips)), -- Use `metric` for the current month's value
+                    "x the overall average and ",
+                    FORMAT('%.1f', SAFE_DIVIDE(b.metric, b.Metric_Avg_By_Company)),
+                    "x the company's average for the city/area. ",
+                    "The variance from the overall average trip duration is ",
+                    FORMAT('%.1f', b.metric - b.Metric_Avg_All_Trips),
+                    ". ",
+                    "Potential reasons could include city-specific seasonal changes, marketing campaigns, or operational adjustments."
+                )
+            END AS Metric_Insight
+        FROM (
+            SELECT
+                a.*,
+                a.metric - a.metric_delta AS Prior_Mon_Metric_Val,
+                ROUND(SAFE_DIVIDE(a.metric_delta, (a.metric - a.metric_delta)), 3) AS Percent_Change,
+                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.metric_delta, (a.metric - a.metric_delta)) * 100), '%') AS Percent_Change_Str
+            FROM (
+                SELECT *
+                FROM MoM_Avg_Trip_Dur_Decreases_Ranked
+                WHERE rank <= 3 -- Select top 3 globally
+            ) a
+        ) b
     )
 
 -- Combine Insights from Fare and Trip Duration Analyses
