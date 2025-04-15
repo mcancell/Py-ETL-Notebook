@@ -4,7 +4,8 @@ WITH
         This CTE calculates the month-over-month (MoM) trip increases for each taxi company. 
         It groups trips by company and month, computes the total trips (metric), and calculates the difference 
         (metric_delta) compared to the previous month using the LAG function.
-    */        SELECT
+    */        
+        SELECT
             company,
             FORMAT_TIMESTAMP('%Y-%m', trip_start_timestamp) AS trip_month,
             COUNT(*) AS metric,
@@ -96,7 +97,9 @@ WITH
                 a.Mon_Metric_Val - Metric_Delta AS Prior_Mon_Metric_Val,
                 a.Mon_Metric_Val,
                 a.Metric_Delta,
-                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change
+                ROUND(SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)), 3) AS Percent_Change,
+                -- Format the percentage change for better readability
+                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change_Strnt_Change_str
             FROM (
                 SELECT
                     'Largest Month-Over-Month Increase in Trips' AS Metric_Description,
@@ -138,7 +141,9 @@ WITH
                 a.Mon_Metric_Val - Metric_Delta AS Prior_Mon_Metric_Val,
                 a.Mon_Metric_Val,
                 a.Metric_Delta,
-                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change
+                ROUND(SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)), 3) AS Percent_Change,
+                -- Format the percentage change for better readability
+                CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change_Strnt_Change_str
             FROM (
                 SELECT
                     'Largest Month-Over-Month Decrease in Fare Per Mile' AS Metric_Description,
