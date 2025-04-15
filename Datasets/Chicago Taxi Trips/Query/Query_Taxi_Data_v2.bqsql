@@ -5,7 +5,8 @@ WITH
             FORMAT_TIMESTAMP('%Y-%m', trip_start_timestamp) AS trip_month,
             COUNT(*) AS metric,
             COUNT(*) - LAG(COUNT(*)) OVER (PARTITION BY company ORDER BY trip_start_timestamp) AS metric_delta,
-            AVG(COUNT(*)) OVER () AS Metric_Avg_All_Trips -- Calculate the average metric over all trips
+            AVG(COUNT(*)) OVER () AS Metric_Avg_All_Trips, -- Average metric over all trips
+            AVG(COUNT(*)) OVER (PARTITION BY company) AS Metric_Avg_By_Company -- Average metric by company
         FROM
             `bigquery-public-data.chicago_taxi_trips.taxi_trips`
         WHERE 
@@ -21,7 +22,8 @@ WITH
             FORMAT_TIMESTAMP('%Y-%m', trip_start_timestamp) AS trip_month,
             SAFE_DIVIDE(SUM(fare), SUM(trip_miles)) AS metric,
             SAFE_DIVIDE(SUM(fare), SUM(trip_miles)) - LAG(SAFE_DIVIDE(SUM(fare), SUM(trip_miles))) OVER (PARTITION BY company ORDER BY trip_start_timestamp) AS metric_delta,
-            AVG(SAFE_DIVIDE(SUM(fare), SUM(trip_miles))) OVER () AS Metric_Avg_All_Trips -- Calculate the average metric over all trips
+            AVG(SAFE_DIVIDE(SUM(fare), SUM(trip_miles))) OVER () AS Metric_Avg_All_Trips, -- Average metric over all trips
+            AVG(SAFE_DIVIDE(SUM(fare), SUM(trip_miles))) OVER (PARTITION BY company) AS Metric_Avg_By_Company -- Average metric by company
         FROM
             `bigquery-public-data.chicago_taxi_trips.taxi_trips`
         WHERE 
@@ -39,6 +41,7 @@ WITH
             metric,
             metric_delta,
             Metric_Avg_All_Trips, -- Include the average metric
+            Metric_Avg_By_Company, -- Include the average metric by company
             ROW_NUMBER() OVER (PARTITION BY company ORDER BY metric_delta DESC) AS rank
         FROM
             MoM_Trip_Increases
@@ -53,6 +56,7 @@ WITH
             metric,
             metric_delta,
             Metric_Avg_All_Trips, -- Include the average metric
+            Metric_Avg_By_Company, -- Include the average metric by company
             ROW_NUMBER() OVER (PARTITION BY company ORDER BY metric_delta ASC) AS rank
         FROM
             MoM_FarePerMile_Decreases
@@ -64,66 +68,121 @@ WITH
         SELECT
             b.*,
             CASE
-            WHEN Prior_Mon_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights"
-            WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) BETWEEN 0 AND .10 THEN 
-            CONCAT(
-            "Minimal Increase in Trips May Suggest Seasonal or Random Fluctuation. ",
-            "Current trips are ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Prior month's trips were ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Variance from average trips is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
-            "Potential reasons could include weather changes, holidays, or minor operational adjustments."
-            )
-            WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .10 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= .30 THEN 
-            CONCAT(
-            "Moderate Increase in Trips May Indicate Growing Demand or Fleet Expansion. ",
-            "Current trips are ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Prior month's trips were ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Variance from average trips is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
-            "Potential reasons could include marketing campaigns, improved service quality, or increased customer demand."
-            )
-            WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .30 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= .60 THEN 
-            CONCAT(
-            "Significant Increase in Trips May Suggest Aggressive Business Growth or Market Expansion. ",
-            "Current trips are ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Prior month's trips were ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Variance from average trips is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
-            "Potential reasons could include new partnerships, expansion into new areas, or increased fleet size."
-            )
-            WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .60 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= 1.0 THEN
-            CONCAT(
-            "Very High Increase in Trips May Indicate New Business Gaining Traction Rapidly. ",
-            "Current trips are ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Prior month's trips were ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Variance from average trips is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
-            "Potential reasons could include a major competitor exiting the market, a surge in demand, or a successful promotional campaign."
-            )
-            WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > 1.0 THEN 
-            CONCAT(
-            "Exceptional Increase in Trips May Suggest a Major Market Disruption or New Entrant with High Growth. ",
-            "Current trips are ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Prior month's trips were ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Variance from average trips is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
-            "Potential reasons could include a breakthrough innovation, significant investment, or a major shift in customer preferences."
-            )
-            WHEN b.Mon_Metric_Val > 2 * b.Metric_Avg_All_Trips OR Prior_Mon_Metric_Val > 2 * b.Metric_Avg_All_Trips THEN
-            CONCAT(
-            "Current or Prior Metric is Exceptionally High Compared to Average. ",
-            "Current trips are ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Prior month's trips were ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-            "Variance from average trips is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
-            "Potential reasons could include outlier events, such as major disruptions, special events, or unique market conditions."
-            )
+                WHEN Prior_Mon_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights"
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) BETWEEN 0 AND .10 THEN 
+                    CONCAT(
+                        "Minimal Increase in Trips May Suggest Seasonal or Random Fluctuation. ",
+                        "Current trips are ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Prior month's trips were ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Variance from overall average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                        " and variance from company average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_By_Company),
+                        ". ",
+                        "Potential reasons could include weather changes, holidays, or minor operational adjustments."
+                    )
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .10 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= .30 THEN 
+                    CONCAT(
+                        "Moderate Increase in Trips May Indicate Growing Demand or Fleet Expansion. ",
+                        "Current trips are ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Prior month's trips were ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Variance from overall average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                        " and variance from company average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_By_Company),
+                        ". ",
+                        "Potential reasons could include marketing campaigns, improved service quality, or increased customer demand."
+                    )
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .30 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= .60 THEN 
+                    CONCAT(
+                        "Significant Increase in Trips May Suggest Aggressive Business Growth or Market Expansion. ",
+                        "Current trips are ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Prior month's trips were ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Variance from overall average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                        " and variance from company average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_By_Company),
+                        ". ",
+                        "Potential reasons could include new partnerships, expansion into new areas, or increased fleet size."
+                    )
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > .60 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) <= 1.0 THEN
+                    CONCAT(
+                        "Prior month's trips were ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Variance from overall average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                        ". ",
+                        "Potential reasons could include a major competitor exiting the market, a surge in demand, or a successful promotional campaign."
+                    )
+                WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) > 1.0 THEN 
+                    CONCAT(
+                        "Exceptional Increase in Trips May Suggest a Major Market Disruption or New Entrant with High Growth. ",
+                        "Current trips are ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Prior month's trips were ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Variance from overall average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                        ". ",
+                        "Potential reasons could include a breakthrough innovation, significant investment, or a major shift in customer preferences."
+                    )
+                WHEN b.Mon_Metric_Val > 2 * b.Metric_Avg_All_Trips OR Prior_Mon_Metric_Val > 2 * b.Metric_Avg_All_Trips THEN
+                    CONCAT(
+                        "Current or Prior Metric is Exceptionally High Compared to Average. ",
+                        "Current trips are ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Prior month's trips were ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                        "x the overall average and ",
+                        FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                        "x the company average. ",
+                        "Variance from overall average trips is ",
+                        FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                        ". ",
+                        "Potential reasons could include outlier events, such as major disruptions, special events, or unique market conditions."
+                    )
             END AS Metric_Insight
         FROM
         (
             SELECT
-                a.Metric_Description,
-                a.Taxi_Company,
-                a.Trip_Month,
-                a.Mon_Metric_Val - Metric_Delta AS Prior_Mon_Metric_Val,
-                a.Mon_Metric_Val,
-                a.Metric_Delta,
-                a.Metric_Avg_All_Trips, -- Include the average metric
+                a.*,
+                a.Mon_Metric_Val - a.Metric_Delta AS Prior_Mon_Metric_Val,
                 ROUND(SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)), 3) AS Percent_Change,
                 CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change_Str
             FROM (
@@ -134,6 +193,7 @@ WITH
                     metric AS Mon_Metric_Val,
                     metric_delta AS Metric_Delta,
                     Metric_Avg_All_Trips, -- Include the average metric
+                    Metric_Avg_By_Company, -- Include the average metric by company
                     ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank
                 FROM
                     MoM_Trip_Increases_Ranked
@@ -153,62 +213,117 @@ WITH
             WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) BETWEEN -0.10 AND 0 THEN 
                 CONCAT(
                 "Minimal Decrease in Fare Per Mile May Suggest Seasonal or Random Fluctuation. ",
-                "Current fare per mile is ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Prior month's fare per mile was ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Variance from average fare per mile is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
+                "Current fare per mile is ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Prior month's fare per mile was ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Variance from overall average fare per mile is ",
+                FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                ". ",
                 "Potential reasons could include temporary promotions, minor demand shifts, or operational adjustments."
                 )
             WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -0.10 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) >= -0.30 THEN 
                 CONCAT(
                 "Moderate Decrease in Fare Per Mile May Indicate Competitive Pricing or Market Adjustment. ",
-                "Current fare per mile is ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Prior month's fare per mile was ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Variance from average fare per mile is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
+                "Current fare per mile is ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Prior month's fare per mile was ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Variance from overall average fare per mile is ",
+                FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                ". ",
                 "Potential reasons could include increased competition, targeted discounts, or market corrections."
                 )
             WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -0.30 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) >= -0.60 THEN 
                 CONCAT(
                 "Significant Decrease in Fare Per Mile May Suggest Aggressive Pricing Strategy or Cost Reduction. ",
-                "Current fare per mile is ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Prior month's fare per mile was ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Variance from average fare per mile is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
+                "Current fare per mile is ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Prior month's fare per mile was ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Variance from overall average fare per mile is ",
+                FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                ". ",
                 "Potential reasons could include operational efficiencies, new pricing models, or strategic market positioning."
                 )
             WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -0.60 AND SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) >= -1.0 THEN 
                 CONCAT(
                 "Very High Decrease in Fare Per Mile May Indicate Drastic Market Changes or New Competition. ",
-                "Current fare per mile is ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Prior month's fare per mile was ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Variance from average fare per mile is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
+                "Current fare per mile is ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Prior month's fare per mile was ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Variance from overall average fare per mile is ",
+                FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                ". ",
                 "Potential reasons could include a major competitor entering the market, significant demand shifts, or economic factors."
                 )
             WHEN SAFE_DIVIDE(b.Metric_Delta, Prior_Mon_Metric_Val) < -1.0 THEN 
                 CONCAT(
                 "Exceptional Decrease in Fare Per Mile May Suggest Major Market Disruption or Strategic Overhaul. ",
-                "Current fare per mile is ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Prior month's fare per mile was ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Variance from average fare per mile is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
+                "Current fare per mile is ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Prior month's fare per mile was ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Variance from overall average fare per mile is ",
+                FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                ". ",
                 "Potential reasons could include a complete pricing strategy shift, market saturation, or external economic pressures."
                 )
             WHEN b.Mon_Metric_Val > 2 * b.Metric_Avg_All_Trips OR Prior_Mon_Metric_Val > 2 * b.Metric_Avg_All_Trips THEN
                 CONCAT(
                 "Current or Prior Metric is Exceptionally High Compared to Average. ",
-                "Current fare per mile is ", FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Prior month's fare per mile was ", FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)), "x the average. ",
-                "Variance from average fare per mile is ", FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips), ". ",
+                "Current fare per mile is ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(b.Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Prior month's fare per mile was ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_All_Trips)),
+                "x the overall average and ",
+                FORMAT('%.1f', SAFE_DIVIDE(Prior_Mon_Metric_Val, b.Metric_Avg_By_Company)),
+                "x the company average. ",
+                "Variance from overall average fare per mile is ",
+                FORMAT('%.1f', b.Mon_Metric_Val - b.Metric_Avg_All_Trips),
+                ". ",
                 "Potential reasons could include outlier events, such as major disruptions, special events, or unique market conditions."
                 )
             END AS Metric_Insight
         FROM
         (
             SELECT
-                a.Metric_Description,
-                a.Taxi_Company,
-                a.Trip_Month,
-                a.Mon_Metric_Val - Metric_Delta AS Prior_Mon_Metric_Val,
-                a.Mon_Metric_Val,
-                a.Metric_Delta,
-                a.Metric_Avg_All_Trips, -- Include the average metric
+                a.*,
+                a.Mon_Metric_Val - a.Metric_Delta AS Prior_Mon_Metric_Val,
                 ROUND(SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)), 3) AS Percent_Change,
                 CONCAT(FORMAT('%.1f', SAFE_DIVIDE(a.Metric_Delta, (a.Mon_Metric_Val - a.Metric_Delta)) * 100), '%') AS Percent_Change_Str
             FROM (
@@ -219,6 +334,7 @@ WITH
                     metric AS Mon_Metric_Val,
                     metric_delta AS Metric_Delta,
                     Metric_Avg_All_Trips, -- Include the average metric
+                    Metric_Avg_By_Company, -- Include the average metric by company
                     ROW_NUMBER() OVER (ORDER BY metric_delta ASC) AS overall_rank
                 FROM
                     MoM_FarePerMile_Decreases_Ranked
