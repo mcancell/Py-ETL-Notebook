@@ -39,7 +39,7 @@
     - `Metric_Mon_Pct_Chg_Str`: String representation of the percentage change (e.g., "123.4%").
     - `Metric_Insight`: Textual insight explaining the metric's significance.
 */
-CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights` AS
+CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_I` AS
 WITH
     -- Standardize Company Names
     Trip_Increases AS (
