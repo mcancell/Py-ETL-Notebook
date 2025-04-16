@@ -1,0 +1,115 @@
+/* 
+    AI Generated:
+    This query analyzes Chicago taxi trip data by aggregating and joining it with geographic information. 
+    It calculates various metrics such as average speed, revenue, and trip density, and includes window functions 
+    to rank and compare performance across cities and companies. The query is optimized for readability and performance.
+
+    Sections:
+    1. Taxi_Trips: Filters and prepares the raw taxi trip data.
+    2. Trip_City_Pop: Joins taxi trips with geographic data and filters out invalid rows.
+    3. Final SELECT: Aggregates data, calculates metrics, and applies window functions for analysis.
+*/
+CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Chi_Taxi_Geo_Data_Joined_Grouped`
+AS
+    WITH 
+        Taxi_Trips AS (
+            /* 
+                Section 1: Taxi_Trips
+                Filters and prepares the raw taxi trip data by selecting relevant columns and removing invalid rows.
+            */
+            SELECT
+                DATE_TRUNC(trip_start_timestamp, QUARTER) AS trip_quarter, -- Extracts the quarter from the trip start timestamp
+                company AS taxi_company, -- Taxi company name
+                pickup_latitude, -- Latitude of the pickup location
+                pickup_longitude, -- Longitude of the pickup location
+                trip_seconds, -- Duration of the trip in seconds
+                trip_miles, -- Distance of the trip in miles
+                fare, -- Fare amount for the trip
+                tips, -- Tips amount for the trip
+                taxi_id, -- Unique identifier for the taxi
+                unique_key -- Unique identifier for the trip
+            FROM `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            WHERE
+                company IS NOT NULL -- Exclude trips with no company information
+                AND trip_seconds IS NOT NULL -- Exclude trips with no duration
+                AND fare IS NOT NULL -- Exclude trips with no fare
+                AND trip_start_timestamp IS NOT NULL -- Exclude trips with no start timestamp
+                AND pickup_latitude IS NOT NULL -- Exclude trips with no pickup latitude
+                AND pickup_longitude IS NOT NULL -- Exclude trips with no pickup longitude
+        ),
+        Trip_City_Pop AS (
+            /* 
+                Section 2: Trip_City_Pop
+                Joins the filtered taxi trip data with geographic data to associate trips with cities and populations.
+                Filters out rows where the city is NULL.
+            */
+            SELECT
+                trips.trip_quarter, -- Quarter of the trip
+                trips.taxi_company, -- Taxi company name
+                geo.city AS city, -- City associated with the trip
+                geo.population AS city_population, -- Population of the city
+                trips.trip_seconds, -- Duration of the trip in seconds
+                trips.trip_miles, -- Distance of the trip in miles
+                trips.fare, -- Fare amount for the trip
+                trips.tips, -- Tips amount for the trip
+                trips.pickup_latitude, -- Latitude of the pickup location
+                trips.pickup_longitude, -- Longitude of the pickup location
+                trips.taxi_id, -- Unique identifier for the taxi
+                trips.unique_key -- Unique identifier for the trip
+            FROM Taxi_Trips trips
+            LEFT JOIN `mikecancell-development.Chicago_Taxi_Trips.Geo_Locations` AS geo
+                ON ABS(geo.latitude - trips.pickup_latitude) < 0.05 -- Match trips to cities by latitude
+                AND ABS(geo.longitude - trips.pickup_longitude) < 0.05 -- Match trips to cities by longitude
+            WHERE geo.city IS NOT NULL -- Exclude rows where the city is NULL
+        )
+    SELECT
+        /* 
+            Section 3: Final SELECT
+            Aggregates data, calculates metrics, and applies window functions for analysis.
+        */
+        trip_quarter, -- Quarter of the trip
+        taxi_company, -- Taxi company name
+        city, -- City associated with the trip
+        AVG(city_population) AS city_population, -- Average population of the city
+        COUNT(unique_key) AS total_trips, -- Total number of trips
+        COUNT(DISTINCT taxi_id) AS unique_taxis, -- Number of unique taxis
+        SUM(trip_seconds) AS total_trip_seconds, -- Total trip duration in seconds
+        AVG(trip_seconds) AS avg_trip_seconds, -- Average trip duration in seconds
+        SUM(trip_miles) AS total_trip_miles, -- Total trip distance in miles
+        AVG(trip_miles) AS avg_trip_miles, -- Average trip distance in miles
+        SUM(fare) AS total_fare, -- Total fare amount
+        AVG(fare) AS avg_fare, -- Average fare amount
+        SUM(tips) AS total_tips, -- Total tips amount
+        AVG(tips) AS avg_tips, -- Average tips amount
+        AVG(pickup_latitude) AS avg_pickup_latitude, -- Average pickup latitude
+        AVG(pickup_longitude) AS avg_pickup_longitude, -- Average pickup longitude
+        -- Calculated Metrics
+        AVG(trip_miles / NULLIF(trip_seconds / 3600, 0)) AS avg_mph_per_trip, -- Average speed in miles per hour
+        AVG(tips / NULLIF(trip_seconds, 0)) * 3600 AS avg_tips_per_hour, -- Average tips per hour
+        AVG(fare / NULLIF(trip_miles, 0)) AS avg_fare_per_mile, -- Average fare per mile
+        AVG(trip_seconds / NULLIF(60, 0)) AS avg_trip_duration_minutes, -- Average trip duration in minutes
+        AVG((fare + tips) / NULLIF(1, 0)) AS avg_total_revenue_per_trip, -- Average total revenue per trip
+        -- Window Functions
+        RANK() OVER (PARTITION BY trip_quarter, city ORDER BY SUM(fare + tips) DESC) AS revenue_rank_within_city, -- Rank by total revenue within city
+        DENSE_RANK() OVER (PARTITION BY trip_quarter, city ORDER BY COUNT(unique_key) DESC) AS trip_count_rank_within_city, -- Rank by total trips within city
+        PERCENT_RANK() OVER (PARTITION BY trip_quarter, city ORDER BY AVG(fare)) AS fare_percentile_within_city, -- Percentile of avg fare within city
+        SUM(SUM(fare)) OVER (PARTITION BY trip_quarter, city) AS total_revenue_per_city, -- Total revenue per city
+        RANK() OVER (PARTITION BY trip_quarter, taxi_company ORDER BY SUM(fare + tips) DESC) AS revenue_rank_within_company, -- Rank by total revenue within company
+        SUM(SUM(fare)) OVER (PARTITION BY trip_quarter, taxi_company) AS total_revenue_per_company, -- Total revenue per company
+        -- Additional Analytics
+        SUM(fare + tips) / NULLIF(SUM(SUM(fare + tips)) OVER (PARTITION BY trip_quarter), 0) * 100 AS revenue_contribution_percentage, -- Revenue contribution by city and company
+        COUNT(unique_key) / NULLIF(AVG(city_population), 0) AS trips_per_population, -- Proxy for trip density
+        COUNT(unique_key) / NULLIF(COUNT(DISTINCT taxi_id), 0) AS avg_trips_per_taxi, -- Average trips per unique taxi
+        AVG(SUM(fare + tips)) OVER (PARTITION BY city ORDER BY trip_quarter) AS avg_revenue_trend -- Revenue trend by city
+    FROM Trip_City_Pop
+    GROUP BY
+        trip_quarter,
+        taxi_company,
+        city
+    ORDER BY
+        trip_quarter DESC,
+        revenue_contribution_percentage DESC,
+        city ASC,
+        taxi_company ASC
+    --LIMIT 1000
+    ;
