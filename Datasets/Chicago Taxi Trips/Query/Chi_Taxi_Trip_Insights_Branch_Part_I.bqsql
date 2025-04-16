@@ -219,13 +219,13 @@ WITH
                     "In  ",
                     FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
                     ", fare per mile decreased by ",
-                    CONCAT("$", FORMAT("%'.2f", b.Metric_Delta)), -- Use FORMAT with '%,.2f' for comma-separated numbers rounded to 2 decimals and format as currency
+                    CONCAT("$", FORMAT("%'.2f", ABS(b.Metric_Delta))), -- Use FORMAT with '%,.2f' for comma-separated numbers rounded to 2 decimals and format as currency
                     " (",
                     b.Metric_Mon_Pct_Chg_Str,
                     ") compared to the previous month. The company's average fare per mile is $",
                     FORMAT("%'.2f", b.Metric_Gross_Avg), -- Include company average in the insight
                     ". This month's fare per mile is $",
-                    FORMAT("%'.2f", b.Metric_Diff_From_Avg), -- Include difference from average
+                    FORMAT("%'.2f", ABS(b.Metric_Diff_From_Avg)), -- Include difference from average
                     " (",
                     FORMAT('%.1f', b.Percent_Diff_From_Avg),
                     "%) ",
