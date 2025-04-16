@@ -1,0 +1,182 @@
+WITH
+    -- Standardize Company Names
+    Standardized_Trip_Increases AS (
+        SELECT
+            REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') AS standardized_company, -- Remove punctuation and standardize names
+            'Largest Month-Over-Month Increase in Trips' AS Metric_Description,
+            company,
+            FORMAT_TIMESTAMP('%Y-%m', trip_month) AS trip_month,
+            metric,
+            LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS prior_month_metric,
+            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta -- Calculate metric_delta here
+        FROM (
+            SELECT
+                company,
+                DATE_TRUNC(trip_start_timestamp, MONTH) AS trip_month,
+                COUNT(*) AS metric
+            FROM
+                `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            WHERE 
+                company IS NOT NULL
+            GROUP BY
+                company, 
+                DATE_TRUNC(trip_start_timestamp, MONTH)
+        ) aggregated_data
+    ),
+    
+    Standardized_Fare_Decreases AS (
+        SELECT
+            REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') AS standardized_company, -- Remove punctuation and standardize names
+            'Largest Month-Over-Month Decrease in Fare Per Mile' AS Metric_Description,
+            company,
+            FORMAT_TIMESTAMP('%Y-%m', trip_month) AS trip_month,
+            metric,
+            LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS prior_month_metric,
+            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta -- Calculate metric_delta here
+        FROM (
+            SELECT
+                company,
+                DATE_TRUNC(trip_start_timestamp, MONTH) AS trip_month,
+                SAFE_DIVIDE(SUM(fare), SUM(trip_miles)) AS metric
+            FROM
+                `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            WHERE 
+                company IS NOT NULL
+                AND trip_miles > 0
+            GROUP BY
+                company, 
+                DATE_TRUNC(trip_start_timestamp, MONTH)
+        ) aggregated_data
+    ),
+
+    -- Rank Trip Increases by Metric Delta
+    MoM_Trip_Increases_Ranked AS (
+        SELECT
+            Metric_Description,
+            standardized_company,
+            company,
+            trip_month,
+            metric,
+            prior_month_metric,
+            metric_delta,
+            SAFE_DIVIDE(metric_delta, prior_month_metric) AS percent_change,
+            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(metric_delta, prior_month_metric) * 100), '%') AS Percent_Change_Str, -- Add percent change string
+            ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY metric_delta DESC) AS rank
+        FROM
+            Standardized_Trip_Increases
+        WHERE
+            prior_month_metric IS NOT NULL
+            AND prior_month_metric > 100
+            AND metric > 100
+            AND SAFE_DIVIDE(metric_delta, prior_month_metric) <= 10
+    ),
+    
+    -- Rank Fare Per Mile Decreases by Metric Delta
+    MoM_FarePerMile_Decreases_Ranked AS (
+        SELECT
+            Metric_Description,
+            standardized_company,
+            company,
+            trip_month,
+            metric,
+            prior_month_metric,
+            metric_delta,
+            SAFE_DIVIDE(metric_delta, prior_month_metric) AS percent_change,
+            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(metric_delta, prior_month_metric) * 100), '%') AS Percent_Change_Str, -- Add percent change string
+            ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY metric_delta ASC) AS rank
+        FROM
+            Standardized_Fare_Decreases
+        WHERE
+            prior_month_metric IS NOT NULL
+            AND prior_month_metric > 0.1
+            AND metric > 0.1
+            AND SAFE_DIVIDE(metric_delta, prior_month_metric) >= -10
+    ),
+
+    -- Extract Top Trip Increase Insights
+    Top_Trip_Increase_Insights AS (
+        SELECT
+            b.*,
+            CASE
+                WHEN b.prior_month_metric IS NULL THEN "No Prior Data Available to Calculate Insights"
+                ELSE CONCAT(
+                    "Current trips are ",
+                    FORMAT('%.1f', CAST(b.Mon_Metric_Val AS FLOAT64)),
+                    ". ",
+                    "Potential reasons could include seasonal changes, marketing campaigns, or operational adjustments."
+                )
+            END AS Metric_Insight
+        FROM (
+            SELECT
+                a.*,
+                ROW_NUMBER() OVER (PARTITION BY a.standardized_company ORDER BY a.overall_rank ASC) AS company_rank
+            FROM (
+                SELECT
+                    Metric_Description,
+                    standardized_company,
+                    company AS Taxi_Company,
+                    trip_month AS Trip_Month,
+                    metric AS Mon_Metric_Val,
+                    metric_delta AS Metric_Delta,
+                    prior_month_metric,
+                    percent_change,
+                    Percent_Change_Str,
+                    ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank
+                FROM
+                    MoM_Trip_Increases_Ranked
+                WHERE
+                    rank = 1
+            ) a
+            WHERE
+                overall_rank <= 3
+        ) b
+        WHERE
+            b.company_rank = 1
+    ),
+
+    -- Extract Top Fare Per Mile Decrease Insights
+    Top_FarePerMile_Decrease_Insights AS (
+        SELECT
+            b.*,
+            CASE
+                WHEN b.prior_month_metric IS NULL THEN "No Prior Data Available to Calculate Insights"
+                ELSE CONCAT(
+                    "Current fare per mile is ",
+                    FORMAT('%.1f', b.Mon_Metric_Val),
+                    ". ",
+                    "Potential reasons could include pricing strategies, market adjustments, or economic factors."
+                )
+            END AS Metric_Insight
+        FROM (
+            SELECT
+                a.*,
+                ROW_NUMBER() OVER (PARTITION BY a.standardized_company ORDER BY a.overall_rank ASC) AS company_rank
+            FROM (
+                SELECT
+                    Metric_Description,
+                    standardized_company,
+                    company AS Taxi_Company,
+                    trip_month AS Trip_Month,
+                    metric AS Mon_Metric_Val,
+                    metric_delta AS Metric_Delta,
+                    prior_month_metric,
+                    percent_change,
+                    Percent_Change_Str,
+                    ROW_NUMBER() OVER (ORDER BY metric_delta ASC) AS overall_rank
+                FROM
+                    MoM_FarePerMile_Decreases_Ranked
+                WHERE
+                    rank = 1
+            ) a
+            WHERE
+                overall_rank <= 3
+        ) b
+        WHERE
+            b.company_rank = 1
+    )
+-- Combine Insights
+SELECT *
+FROM Top_Trip_Increase_Insights
+UNION ALL
+SELECT *
+FROM Top_FarePerMile_Decrease_Insights
