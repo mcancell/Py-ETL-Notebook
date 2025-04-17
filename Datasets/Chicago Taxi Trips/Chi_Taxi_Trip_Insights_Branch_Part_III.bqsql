@@ -30,7 +30,6 @@
         2. Trip_City_Pop: Joins taxi trips with geographic data and filters out invalid rows.
         3. Final SELECT: Aggregates data, calculates metrics, and applies window functions for analysis.
 */
-
 # CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Chi_Taxi_Geo_Data_Joined_Grouped` AS
     WITH 
         Taxi_Trips AS (
