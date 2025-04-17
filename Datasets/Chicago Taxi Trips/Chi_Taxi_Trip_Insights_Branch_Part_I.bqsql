@@ -39,7 +39,8 @@
     - `Metric_Mon_Pct_Chg_Str`: String representation of the percentage change (e.g., "123.4%").
     - `Metric_Insight`: Textual insight explaining the metric's significance.
 */
---CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_I` AS
+
+-- CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_I` AS
 WITH
     -- Standardize Company Names
     Trip_Increases AS (
@@ -111,7 +112,7 @@ WITH
             Metric_Diff_From_Avg, -- Include difference from average
             Percent_Diff_From_Avg, -- Include percentage difference from average
             SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) AS Metric_Mon_Pct_Chg, -- Calculate percentage change
-            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
+            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(ABS(metric_delta), Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
             ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY metric_delta DESC) AS rank -- Rank by largest increase
         FROM
             Trip_Increases
@@ -136,7 +137,7 @@ WITH
             Metric_Diff_From_Avg, -- Include difference from average
             Percent_Diff_From_Avg, -- Include percentage difference from average
             SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) AS Metric_Mon_Pct_Chg, -- Calculate percentage change
-            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
+            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(ABS(metric_delta), Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
             ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY metric_delta ASC) AS rank -- Rank by largest decrease
         FROM
             Fare_Decreases
@@ -157,7 +158,7 @@ WITH
                     "In  ",
                     FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
                     ", trips increased by ",
-                    FORMAT("%'d", CAST(b.Metric_Delta AS INT64)), -- Use FORMAT with '%d' and ',' for comma-separated numbers
+                    FORMAT("%'d", CAST(ABS(b.Metric_Delta) AS INT64)), -- Use FORMAT with '%d' and ',' for comma-separated numbers
                     " (",
                     b.Metric_Mon_Pct_Chg_Str,
                     ") compared to the previous month. The company's average monthly trips are ",
@@ -227,7 +228,7 @@ WITH
                     ". This month's fare per mile is $",
                     FORMAT("%'.2f", ABS(b.Metric_Diff_From_Avg)), -- Include difference from average
                     " (",
-                    FORMAT('%.1f', b.Percent_Diff_From_Avg),
+                    FORMAT('%.1f', ABS(b.Percent_Diff_From_Avg)),
                     "%) ",
                     IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
                     " the company's average.\nPotential reasons could include: ",
