@@ -1,14 +1,36 @@
 /* 
-    AI Generated:
-    This query analyzes Chicago taxi trip data by aggregating and joining it with geographic information. 
-    It calculates various metrics such as average speed, revenue, and trip density, and includes window functions 
-    to rank and compare performance across cities and companies. The query is optimized for readability and performance.
+        AI Generated:
+        This query analyzes Chicago taxi trip data by aggregating and joining it with geographic information. 
+        It calculates various metrics such as average speed, revenue, and trip density, and includes window functions 
+        to rank and compare performance across cities and companies. The query is optimized for readability and performance.
 
-    Sections:
-    1. Taxi_Trips: Filters and prepares the raw taxi trip data.
-    2. Trip_City_Pop: Joins taxi trips with geographic data and filters out invalid rows.
-    3. Final SELECT: Aggregates data, calculates metrics, and applies window functions for analysis.
+        Output Columns:
+        1. trip_id: Unique identifier for each taxi trip.
+        2. pickup_datetime: The timestamp when the trip started.
+        3. dropoff_datetime: The timestamp when the trip ended.
+        4. trip_duration_minutes: Duration of the trip in minutes, calculated from pickup and dropoff times.
+        5. trip_distance_miles: Distance of the trip in miles.
+        6. average_speed_mph: Average speed of the trip in miles per hour, derived from distance and duration.
+        7. total_fare: Total fare collected for the trip.
+        8. trip_city: The city where the trip occurred, derived from geographic data.
+        9. company_name: The taxi company providing the service.
+        10. trip_density: Number of trips per square mile in the city, indicating trip concentration.
+        11. revenue_per_mile: Revenue generated per mile for the trip.
+        12. city_rank: Rank of the city based on trip density, using a window function.
+        13. company_rank: Rank of the taxi company based on total revenue, using a window function.
+
+        Insights Offered:
+        - Average speed and trip duration provide insights into traffic conditions and trip efficiency.
+        - Revenue metrics help evaluate the financial performance of trips and companies.
+        - Trip density highlights areas with high taxi demand, useful for resource allocation.
+        - City and company rankings enable comparative analysis across geographic and organizational dimensions.
+
+        Sections:
+        1. Taxi_Trips: Filters and prepares the raw taxi trip data.
+        2. Trip_City_Pop: Joins taxi trips with geographic data and filters out invalid rows.
+        3. Final SELECT: Aggregates data, calculates metrics, and applies window functions for analysis.
 */
+
 # CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Chi_Taxi_Geo_Data_Joined_Grouped` AS
     WITH 
         Taxi_Trips AS (
