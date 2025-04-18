@@ -2,3 +2,4 @@
 SELECT * FROM `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_I`
 UNION ALL
 SELECT * FROM `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_II`
+ORDER BY Metric_Description

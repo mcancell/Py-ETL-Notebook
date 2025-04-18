@@ -4,14 +4,10 @@
     This query analyzes Chicago Taxi Trips data to provide insights into:
     1. The largest month-over-month decreases in trips for each taxi company.
     2. The largest month-over-month increases in fare per mile for each taxi company.
-    3. Overall company averages (`Metric_Gross_Avg`) for trips and fare per mile.
-    4. Differences from the average (`Metric_Diff_From_Avg`) and percentage differences from the average (`Percent_Diff_From_Avg`).
 
     Key Features:
     - Standardizes company names to handle variations (e.g., punctuation, case).
     - Calculates month-over-month metrics (trip count and fare per mile).
-    - Includes overall company averages for trips and fare per mile.
-    - Computes metrics for differences from the average and percentage differences from the average.
     - Ranks companies based on the largest decreases and increases.
     - Extracts insights for the top 3 companies for each metric.
 
@@ -33,9 +29,6 @@
     - `Mon_Metric_Val`: Current month's metric value (trip count or fare per mile).
     - `Metric_Delta`: Month-over-month change in the metric.
     - `Mon_Prior_Metric_Val`: Previous month's metric value.
-    - `Metric_Gross_Avg`: Overall company average for trips or fare per mile.
-    - `Metric_Diff_From_Avg`: Difference from the average.
-    - `Percent_Diff_From_Avg`: Percentage difference from the average.
     - `Metric_Mon_Pct_Chg`: Numeric percentage change from the prior month.
     - `Metric_Mon_Pct_Chg_Str`: String representation of the percentage change (e.g., "123.4%").
     - `Metric_Insight`: Textual insight explaining the metric's significance.
@@ -46,8 +39,7 @@ WITH
     /* 
         Trip_Decreases CTE:
         Identifies the largest month-over-month decreases in trip counts for each taxi company.
-        Standardizes company names, calculates month-over-month changes, and computes overall company averages.
-        Includes metrics for differences from the average and percentage differences from the average.
+        Standardizes company names, calculates month-over-month changes.
     */
     Trip_Decreases AS (
         SELECT
@@ -57,10 +49,7 @@ WITH
             FORMAT_TIMESTAMP('%Y-%m', trip_month) AS trip_month, -- Format trip month as YYYY-MM
             metric,
             LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS Mon_Prior_Metric_Val, -- Previous month's metric
-            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta, -- Month-over-month change
-            AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '')) AS Metric_Gross_Avg, -- Overall company average for trips
-            metric - AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '')) AS Metric_Diff_From_Avg, -- Difference from average
-            SAFE_DIVIDE(metric - AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '')), AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', ''))) * 100 AS Percent_Diff_From_Avg -- Percentage difference from average
+            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta -- Month-over-month change
         FROM (
             SELECT
                 company,
@@ -79,8 +68,7 @@ WITH
     /* 
         Fare_Increases CTE:
         Calculates month-over-month changes in fare per mile for taxi companies.
-        Standardizes company names, computes metrics such as differences from the previous month's fare per mile, 
-        overall averages, and percentage differences from the average.
+        Standardizes company names and computes metrics such as differences from the previous month's fare per mile.
     */
     Fare_Increases AS (
         SELECT
@@ -90,10 +78,7 @@ WITH
             FORMAT_TIMESTAMP('%Y-%m', trip_month) AS trip_month, -- Format trip month as YYYY-MM
             metric,
             LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS Mon_Prior_Metric_Val, -- Previous month's metric
-            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta, -- Month-over-month change
-            AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '')) AS Metric_Gross_Avg, -- Overall company average for fare per mile
-            metric - AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '')) AS Metric_Diff_From_Avg, -- Difference from average
-            SAFE_DIVIDE(metric - AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '')), AVG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', ''))) * 100 AS Percent_Diff_From_Avg -- Percentage difference from average
+            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta -- Month-over-month change
         FROM (
             SELECT
                 company,
@@ -120,9 +105,6 @@ WITH
             metric,
             Mon_Prior_Metric_Val,
             metric_delta,
-            Metric_Gross_Avg, -- Include company average
-            Metric_Diff_From_Avg, -- Include difference from average
-            Percent_Diff_From_Avg, -- Include percentage difference from average
             SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) AS Metric_Mon_Pct_Chg, -- Calculate percentage change
             CONCAT(FORMAT('%.1f', SAFE_DIVIDE(ABS(metric_delta), Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
             ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY metric_delta ASC) AS rank -- Rank by largest decrease
@@ -145,9 +127,6 @@ WITH
             metric,
             Mon_Prior_Metric_Val,
             metric_delta,
-            Metric_Gross_Avg, -- Include company average
-            Metric_Diff_From_Avg, -- Include difference from average
-            Percent_Diff_From_Avg, -- Include percentage difference from average
             SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) AS Metric_Mon_Pct_Chg, -- Calculate percentage change
             CONCAT(FORMAT('%.1f', SAFE_DIVIDE(ABS(metric_delta), Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
             ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY metric_delta DESC) AS rank -- Rank by largest increase
@@ -167,23 +146,13 @@ WITH
             CASE
                 WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
                 ELSE CONCAT(
-                    "In  ",
+                    "In ",
                     FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
                     ", trips decreased by ",
                     FORMAT("%'d", CAST(ABS(b.Metric_Delta) AS INT64)), -- Use FORMAT with '%d' and ',' for comma-separated numbers
                     " (",
                     b.Metric_Mon_Pct_Chg_Str,
-                    ") compared to the previous month.",
-                    "\nThe company's average monthly trips are ",
-                    FORMAT("%'d", CAST(b.Metric_Gross_Avg AS INT64)), -- Include company average in the insight
-                    ".",
-                    "\nThis month's trips are ",
-                    FORMAT("%'d", CAST(ABS(b.Metric_Diff_From_Avg) AS INT64)), -- Include absolute difference from average
-                    " trips (",
-                    FORMAT('%.1f', ABS(b.Percent_Diff_From_Avg)),
-                    "%) ",
-                    IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
-                    " the company's average."
+                    ") compared to the previous month."
                 )
             END AS Metric_Insight,
             CASE
@@ -214,9 +183,6 @@ WITH
                     metric AS Mon_Metric_Val,
                     metric_delta AS Metric_Delta,
                     Mon_Prior_Metric_Val,
-                    Metric_Gross_Avg, -- Include company average
-                    Metric_Diff_From_Avg, -- Include difference from average
-                    Percent_Diff_From_Avg, -- Include percentage difference from average
                     Metric_Mon_Pct_Chg,
                     Metric_Mon_Pct_Chg_Str,
                     ROW_NUMBER() OVER (ORDER BY metric_delta ASC) AS overall_rank -- Rank globally by largest decrease
@@ -239,23 +205,13 @@ WITH
             CASE
             WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
             ELSE CONCAT(
-                "In  ",
+                "In ",
                 FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
                 ", fare per mile increased by ",
                 CONCAT("$", FORMAT("%'.2f", ABS(b.Metric_Delta))), -- Use FORMAT with '%,.2f' for comma-separated numbers rounded to 2 decimals and format as currency
                 " (",
                 b.Metric_Mon_Pct_Chg_Str,
-                ") compared to the previous month.",
-                "\nThe company's average fare per mile is $",
-                FORMAT("%'.2f", b.Metric_Gross_Avg), -- Include company average in the insight
-                ".",
-                "\nThis month's fare per mile is $",
-                FORMAT("%'.2f", ABS(b.Metric_Diff_From_Avg)), -- Include difference from average
-                " (",
-                FORMAT('%.1f', ABS(b.Percent_Diff_From_Avg)),
-                "%) ",
-                IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
-                " the company's average."
+                ") compared to the previous month."
             )
             END AS Metric_Insight,
             CASE
@@ -285,9 +241,6 @@ WITH
                     metric AS Mon_Metric_Val,
                     metric_delta AS Metric_Delta,
                     Mon_Prior_Metric_Val,
-                    Metric_Gross_Avg, -- Include company average
-                    Metric_Diff_From_Avg, -- Include difference from average
-                    Percent_Diff_From_Avg, -- Include percentage difference from average
                     Metric_Mon_Pct_Chg,
                     Metric_Mon_Pct_Chg_Str,
                     ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank -- Rank globally by largest increase
@@ -310,9 +263,6 @@ SELECT
     Mon_Metric_Val,
     Metric_Delta,
     Mon_Prior_Metric_Val,
-    ROUND(Metric_Gross_Avg, 2) AS Metric_Gross_Avg, -- Round to 2 decimals
-    ROUND(Metric_Diff_From_Avg, 2) AS Metric_Diff_From_Avg, -- Round to 2 decimals
-    ROUND(Percent_Diff_From_Avg, 2) AS Percent_Diff_From_Avg, -- Round to 2 decimals
     ROUND(Metric_Mon_Pct_Chg, 2) AS Metric_Mon_Pct_Chg, -- Round to 2 decimals
     Metric_Mon_Pct_Chg_Str,
     Metric_Insight,
@@ -326,9 +276,6 @@ SELECT
     Mon_Metric_Val,
     Metric_Delta,
     Mon_Prior_Metric_Val,
-    ROUND(Metric_Gross_Avg, 2) AS Metric_Gross_Avg, -- Round to 2 decimals
-    ROUND(Metric_Diff_From_Avg, 2) AS Metric_Diff_From_Avg, -- Round to 2 decimals
-    ROUND(Percent_Diff_From_Avg, 2) AS Percent_Diff_From_Avg, -- Round to 2 decimals
     ROUND(Metric_Mon_Pct_Chg, 2) AS Metric_Mon_Pct_Chg, -- Round to 2 decimals
     Metric_Mon_Pct_Chg_Str,
     Metric_Insight,
