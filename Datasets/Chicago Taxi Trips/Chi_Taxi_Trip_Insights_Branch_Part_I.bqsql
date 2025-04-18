@@ -1,6 +1,6 @@
 -- Part I of the Chicago Taxi Trips Insights Query
 /* 
-    AI Generated doc:
+    AI Generated comments:
     This query analyzes Chicago Taxi Trips data to identify:
     1. The largest month-over-month increases in trips for each taxi company.
     2. The largest month-over-month decreases in fare per mile for each taxi company.
@@ -268,5 +268,5 @@ SELECT
     Metric_Insight,
     Metric_Reasons
 FROM Top_FarePerMile_Decrease_Insights
-ORDER BY Metric_Description, Trip_Month DESC; -- Order by metric description and month in descending order
+ORDER BY Metric_Description, Metric_Delta; -- Order by metric description and Delta
 -- End of Query

@@ -281,5 +281,5 @@ SELECT
     Metric_Insight,
     Metric_Reasons
 FROM Top_FarePerMile_Increase_Insights -- Corrected reference to Top_FarePerMile_Increase_Insights
-ORDER BY Metric_Description, Trip_Month DESC; -- Order by metric description and month in descending order
+ORDER BY Metric_Description, Metric_Delta; -- Order by metric description and Metric Delta
 -- End of Query
