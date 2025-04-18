@@ -154,32 +154,38 @@ WITH
         SELECT
             b.*,
             CASE
-                WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
-                ELSE CONCAT(
-                    "In  ",
-                    FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
-                    ", trips increased by ",
-                    FORMAT("%'d", CAST(ABS(b.Metric_Delta) AS INT64)), -- Use FORMAT with '%d' and ',' for comma-separated numbers
-                    " (",
-                    b.Metric_Mon_Pct_Chg_Str,
-                    ") compared to the previous month. The company's average monthly trips are ",
-                    FORMAT("%'d", CAST(b.Metric_Gross_Avg AS INT64)), -- Include company average in the insight
-                    ". This month's trips are ",
-                    FORMAT("%'d", CAST(b.Metric_Diff_From_Avg AS INT64)), -- Include difference from average
-                    " trips (",
-                    FORMAT('%.1f', b.Percent_Diff_From_Avg),
-                    "%) ",
-                    IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
-                    " the company's average.\nPotential reasons could include: ",
-                    "\n- seasonal changes, ",
-                    "\n- marketing campaigns, ",
-                    "\n- operational adjustments, ",
-                    "\n- increased demand due to events, ",
-                    "\n- improved service offerings, ",
-                    "\n- increased fleet size, ",
-                    "\n- acquisition or merger with former competitor."
-                )
-            END AS Metric_Insight
+            WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
+            ELSE CONCAT(
+                "In  ",
+                FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
+                ", trips increased by ",
+                FORMAT("%'d", CAST(ABS(b.Metric_Delta) AS INT64)), -- Use FORMAT with '%d' and ',' for comma-separated numbers
+                " (",
+                b.Metric_Mon_Pct_Chg_Str,
+                ") compared to the previous month.",
+                "\nThe company's average monthly trips are ",
+                FORMAT("%'d", CAST(b.Metric_Gross_Avg AS INT64)), -- Include company average in the insight
+                "."
+                "\nThis month's trips are ",
+                FORMAT("%'d", CAST(b.Metric_Diff_From_Avg AS INT64)), -- Include difference from average
+                "(",
+                FORMAT('%.1f', b.Percent_Diff_From_Avg),
+                "%) ",
+                IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
+                " the company's average."
+            )
+            END AS Metric_Insight,
+            CASE
+            WHEN b.Mon_Prior_Metric_Val IS NULL THEN NULL -- No reasons if no prior data
+            ELSE "Potential reasons could include: " ||
+                "\n- seasonal changes, " ||
+                "\n- marketing campaigns, " ||
+                "\n- operational adjustments, " ||
+                "\n- increased demand due to events, " ||
+                "\n- improved service offerings, " ||
+                "\n- increased fleet size, " ||
+                "\n- acquisition or merger with former competitor."
+            END AS Metric_Reasons
         FROM (
             SELECT
                 a.*,
@@ -216,35 +222,41 @@ WITH
         SELECT
             b.*,
             CASE
-                WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
-                ELSE CONCAT(
-                    "In  ",
-                    FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
-                    ", fare per mile decreased by ",
-                    CONCAT("$", FORMAT("%'.2f", ABS(b.Metric_Delta))), -- Use FORMAT with '%,.2f' for comma-separated numbers rounded to 2 decimals and format as currency
-                    " (",
-                    b.Metric_Mon_Pct_Chg_Str,
-                    ") compared to the previous month. The company's average fare per mile is $",
-                    FORMAT("%'.2f", b.Metric_Gross_Avg), -- Include company average in the insight
-                    ". This month's fare per mile is $",
-                    FORMAT("%'.2f", ABS(b.Metric_Diff_From_Avg)), -- Include difference from average
-                    " (",
-                    FORMAT('%.1f', ABS(b.Percent_Diff_From_Avg)),
-                    "%) ",
-                    IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
-                    " the company's average.\nPotential reasons could include: ",
-                    "\n- promotional discounts or fare reductions, ",
-                    "\n- introduction of new pricing models, ",
-                    "\n- increased use of flat-rate fares, ",
-                    "\n- temporary subsidies or incentives, ",
-                    "\n- errors in fare calculation or reporting, ",
-                    "\n- increased prevalence of shorter trips, ",
-                    "\n- changes in trip patterns or routes, ",
-                    "\n- seasonal or event-driven demand shifts, ",
-                    "\n- increased competition driving down prices, ",
-                    "\n- operational adjustments to attract more riders."
-                )
-            END AS Metric_Insight
+            WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
+            ELSE CONCAT(
+                "In  ",
+                FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
+                ", fare per mile decreased by ",
+                CONCAT("$", FORMAT("%'.2f", ABS(b.Metric_Delta))), -- Use FORMAT with '%,.2f' for comma-separated numbers rounded to 2 decimals and format as currency
+                " (",
+                b.Metric_Mon_Pct_Chg_Str,
+                ") compared to the previous month.",
+                "\nThe company's average fare per mile is $",
+                FORMAT("%'.2f", b.Metric_Gross_Avg), -- Include company average in the insight
+                ".",
+                "\nThis month's fare per mile is $",
+                FORMAT("%'.2f", ABS(b.Metric_Diff_From_Avg)), -- Include difference from average
+                " (",
+                FORMAT('%.1f', ABS(b.Percent_Diff_From_Avg)),
+                "%) ",
+                IF(b.Metric_Diff_From_Avg > 0, "above", "below"),
+                " the company's average."
+            )
+            END AS Metric_Insight,
+            CASE
+            WHEN b.Mon_Prior_Metric_Val IS NULL THEN NULL -- No reasons if no prior data
+            ELSE "Potential reasons could include: " ||
+                "\n- promotional discounts or fare reductions, " ||
+                "\n- introduction of new pricing models, " ||
+                "\n- increased use of flat-rate fares, " ||
+                "\n- temporary subsidies or incentives, " ||
+                "\n- errors in fare calculation or reporting, " ||
+                "\n- increased prevalence of shorter trips, " ||
+                "\n- changes in trip patterns or routes, " ||
+                "\n- seasonal or event-driven demand shifts, " ||
+                "\n- increased competition driving down prices, " ||
+                "\n- operational adjustments to attract more riders."
+            END AS Metric_Reasons
         FROM (
             SELECT
                 a.*,
@@ -288,7 +300,8 @@ SELECT
     ROUND(Percent_Diff_From_Avg, 2) AS Percent_Diff_From_Avg, -- Round to 2 decimals
     ROUND(Metric_Mon_Pct_Chg, 2) AS Metric_Mon_Pct_Chg, -- Round to 2 decimals
     Metric_Mon_Pct_Chg_Str,
-    Metric_Insight
+    Metric_Insight,
+    Metric_Reasons
 FROM Top_Trip_Increase_Insights
 UNION ALL
 SELECT 
@@ -303,7 +316,8 @@ SELECT
     ROUND(Percent_Diff_From_Avg, 2) AS Percent_Diff_From_Avg, -- Round to 2 decimals
     ROUND(Metric_Mon_Pct_Chg, 2) AS Metric_Mon_Pct_Chg, -- Round to 2 decimals
     Metric_Mon_Pct_Chg_Str,
-    Metric_Insight
+    Metric_Insight,
+    Metric_Reasons
 FROM Top_FarePerMile_Decrease_Insights
 ORDER BY Metric_Description, Trip_Month DESC; -- Order by metric description and month in descending order
 -- End of Query

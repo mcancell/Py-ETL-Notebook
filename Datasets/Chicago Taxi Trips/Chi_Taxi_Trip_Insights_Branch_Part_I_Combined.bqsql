@@ -1,0 +1,4 @@
+--CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_I_Combined` AS
+SELECT * FROM `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_I`
+UNION ALL
+SELECT * FROM `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_II`
