@@ -1,3 +1,4 @@
+-- Part II: Extra Insights and Analytics on Chicago Taxi Trips
 /*
         AI Generated:
         This query analyzes Chicago taxi trip data by aggregating and joining it with geographic information. 
