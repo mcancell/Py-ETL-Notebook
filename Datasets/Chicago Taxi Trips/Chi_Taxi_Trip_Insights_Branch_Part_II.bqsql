@@ -1,31 +1,31 @@
 /* 
     AI Generated doc:
-    This query analyzes Chicago Taxi Trips data to identify:
-    1. The largest month-over-month increases in trips for each taxi company.
-    2. The largest month-over-month decreases in fare per mile for each taxi company.
-    3. The overall company averages (`Metric_Gross_Avg`) for trips and fare per mile.
-    4. The difference from the average (`Metric_Diff_From_Avg`) and percentage difference from the average (`Percent_Diff_From_Avg`).
+    This query analyzes Chicago Taxi Trips data to provide insights into:
+    1. The largest month-over-month decreases in trips for each taxi company.
+    2. The largest month-over-month increases in fare per mile for each taxi company.
+    3. Overall company averages (`Metric_Gross_Avg`) for trips and fare per mile.
+    4. Differences from the average (`Metric_Diff_From_Avg`) and percentage differences from the average (`Percent_Diff_From_Avg`).
 
     Key Features:
     - Standardizes company names to handle variations (e.g., punctuation, case).
     - Calculates month-over-month metrics (trip count and fare per mile).
     - Includes overall company averages for trips and fare per mile.
-    - Includes metrics for difference from average and percentage difference from average.
-    - Ranks companies based on the largest increases and decreases.
+    - Computes metrics for differences from the average and percentage differences from the average.
+    - Ranks companies based on the largest decreases and increases.
     - Extracts insights for the top 3 companies for each metric.
 
     Filters Applied:
     - Exclude trips with no company information (`company IS NOT NULL`).
     - Exclude trips with zero or negative miles for fare per mile calculations (`trip_miles > 0`).
     - Exclude months with very low prior metrics to avoid noise:
-        - `Mon_Prior_Metric_Val > 100` for trip increases.
-        - `Mon_Prior_Metric_Val > 0.1` for fare per mile decreases.
+        - `Mon_Prior_Metric_Val > 100` for trip decreases.
+        - `Mon_Prior_Metric_Val > 0.1` for fare per mile increases.
     - Cap extreme percentage changes:
-        - `SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) <= 10` for trip increases.
-        - `SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) >= -10` for fare per mile decreases.
+        - `SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) >= -10` for trip decreases.
+        - `SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) <= 10` for fare per mile increases.
 
     Resulting Output Columns:
-    - `Metric_Description`: Describes the metric being analyzed (e.g., "Largest Month-Over-Month Increase in Trips").
+    - `Metric_Description`: Describes the metric being analyzed (e.g., "Largest Month-Over-Month Decrease in Trips").
     - `standardized_company`: Standardized company name (lowercase, no punctuation).
     - `Taxi_Company`: Original company name.
     - `Trip_Month`: Month of the metric in `YYYY-MM` format.
@@ -43,11 +43,10 @@
 -- CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_II` AS
 WITH
     /* 
-        This CTE identifies the largest month-over-month decreases in trip counts for each taxi company.
-        It standardizes company names to handle variations (e.g., punctuation, case), calculates the 
-        month-over-month change in trip counts, and computes overall company averages for trips. 
-        Additionally, it includes metrics for the difference from the average and the percentage 
-        difference from the average.
+        Trip_Decreases CTE:
+        Identifies the largest month-over-month decreases in trip counts for each taxi company.
+        Standardizes company names, calculates month-over-month changes, and computes overall company averages.
+        Includes metrics for differences from the average and percentage differences from the average.
     */
     Trip_Decreases AS (
         SELECT
@@ -78,10 +77,9 @@ WITH
     
     /* 
         Fare_Increases CTE:
-        This Common Table Expression (CTE) calculates month-over-month changes in fare per mile for taxi companies in Chicago. 
-        It standardizes company names, computes metrics such as the difference from the previous month's fare per mile, 
-        the overall average fare per mile for each company, and the percentage difference from the average. 
-        The data is grouped by company and month, and only trips with valid company information and positive miles are included.
+        Calculates month-over-month changes in fare per mile for taxi companies.
+        Standardizes company names, computes metrics such as differences from the previous month's fare per mile, 
+        overall averages, and percentage differences from the average.
     */
     Fare_Increases AS (
         SELECT
@@ -111,7 +109,7 @@ WITH
         ) aggregated_data
     ),
 
-    -- Rank Trip Increases by Metric Delta
+    -- Rank Trip Decreases by Metric Delta
     MoM_Trip_Decreases_Ranked AS (
         SELECT
             Metric_Description,
@@ -136,7 +134,7 @@ WITH
             AND SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) >= -10 -- Cap extreme percentage changes
     ),
     
-    -- Rank Fare Per Mile Decreases by Metric Delta
+    -- Rank Fare Per Mile Increases by Metric Delta
     MoM_FarePerMile_Increases_Ranked AS (
         SELECT
             Metric_Description,
@@ -161,7 +159,7 @@ WITH
             AND SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) <= 10 -- Cap extreme percentage increases
     ),
 
-    -- Extract Top Trip Increase Insights
+    -- Extract Top Trip Decrease Insights
     Top_Trip_Decrease_Insights AS (
         SELECT
             b.*,
@@ -223,7 +221,7 @@ WITH
             b.company_rank = 1 -- Ensure each company appears only once
     ),
 
-    -- Extract Top Fare Per Mile Decrease Insights
+    -- Extract Top Fare Per Mile Increase Insights
     Top_FarePerMile_Increase_Insights AS (
         SELECT
             b.*,
