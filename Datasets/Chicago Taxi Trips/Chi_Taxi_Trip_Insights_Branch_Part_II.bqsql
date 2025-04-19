@@ -1,6 +1,6 @@
 -- Part II of the Chicago Taxi Trips Insights Query
 /* 
-    AI Generated doc:
+    AI Generated comments:
     This query analyzes Chicago Taxi Trips data to provide insights into:
     1. The largest month-over-month decreases in trips for each taxi company.
     2. The largest month-over-month increases in fare per mile for each taxi company.
