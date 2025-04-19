@@ -87,6 +87,6 @@ This directory contains reusable functions and utilities for the project.
 ## Contact
 
 For questions or support, please contact:  
-- Noam Berns: [noam.berns@ourbranch.com](mailto:noam.berns@ourbranch.com)  
-- Austin McCleary: [austin.mccleary@ourbranch.com](mailto:austin.mccleary@ourbranch.com)  
-- Carson Wilshire: [carson.wilshire@ourbranch.com](mailto:carson.wilshire@ourbranch.com)
+- Mike Cancell (mike.cancell@gmail.com)
+- GitHub: [mikecancell](https://github.com/mcancell/Py-ETL-Notebook/tree/main/Datasets/Chicago%20Taxi%20Trips)
+- LinkedIn: [Mike Cancell](https://www.linkedin.com/in/mikecancell/)
