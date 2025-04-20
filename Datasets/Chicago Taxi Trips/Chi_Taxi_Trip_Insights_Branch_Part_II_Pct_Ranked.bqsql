@@ -1,0 +1,285 @@
+-- Part II of the Chicago Taxi Trips Insights Query
+/* 
+    AI Generated comments:
+    This query analyzes Chicago Taxi Trips data to provide insights into:
+    1. The largest month-over-month pct decreases in trips for each taxi company.
+    2. The largest month-over-month pct increases in fare per mile for each taxi company.
+
+    Key Features:
+    - Standardizes company names to handle variations (e.g., punctuation, case).
+    - Calculates month-over-month metrics (trip count and fare per mile).
+    - Ranks companies based on the largest pct decreases and increases.
+    - Extracts insights for the top 3 companies for each metric.
+
+    Filters Applied:
+    - Exclude trips with no company information (`company IS NOT NULL`).
+    - Exclude trips with zero or negative miles for fare per mile calculations (`trip_miles > 0`).
+    - Exclude months with very low prior metrics to avoid noise:
+        - `Mon_Prior_Metric_Val > 100` for trip decreases.
+        - `Mon_Prior_Metric_Val > 0.1` for fare per mile increases.
+    - Cap extreme percentage changes:
+        - `SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) >= -10` for trip decreases.
+        - `SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) <= 10` for fare per mile increases.
+
+    Resulting Output Columns:
+    - `Metric_Description`: Describes the metric being analyzed (e.g., "Largest Month-Over-Month Decrease in Trips").
+    - `standardized_company`: Standardized company name (lowercase, no punctuation).
+    - `Taxi_Company`: Original company name.
+    - `Trip_Month`: Month of the metric in `YYYY-MM` format.
+    - `Mon_Metric_Val`: Current month's metric value (trip count or fare per mile).
+    - `Metric_Delta`: Month-over-month change in the metric.
+    - `Mon_Prior_Metric_Val`: Previous month's metric value.
+    - `Metric_Mon_Pct_Chg`: Numeric percentage change from the prior month.
+    - `Metric_Mon_Pct_Chg_Str`: String representation of the percentage change (e.g., "123.4%").
+    - `Metric_Insight`: Textual insight explaining the metric's significance.
+*/
+
+--CREATE OR REPLACE TABLE `mikecancell-development.Chicago_Taxi_Trips.Monthly_Insights_Part_II_Pct_Ranked` AS
+WITH
+    /* 
+        Trip_Decreases CTE:
+        Identifies the largest month-over-month decreases in trip counts for each taxi company.
+        Standardizes company names, calculates month-over-month changes.
+    */
+    Trip_Decreases AS (
+        SELECT
+            REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') AS standardized_company, -- Standardize company names
+            'II.a.1-Largest Month-Over-Month Pct Decrease in Trips' AS Metric_Description,
+            company,
+            FORMAT_TIMESTAMP('%Y-%m', trip_month) AS trip_month, -- Format trip month as YYYY-MM
+            metric,
+            LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS Mon_Prior_Metric_Val, -- Previous month's metric
+            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta -- Month-over-month change
+        FROM (
+            SELECT
+                company,
+                DATE_TRUNC(trip_start_timestamp, MONTH) AS trip_month, -- Extract month from trip start timestamp
+                COUNT(*) AS metric -- Count trips
+            FROM
+                `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            WHERE 
+                company IS NOT NULL -- Exclude trips with no company information
+            GROUP BY
+                company, 
+                DATE_TRUNC(trip_start_timestamp, MONTH)
+        ) aggregated_data
+    ),
+    
+    /* 
+        Fare_Increases CTE:
+        Calculates month-over-month changes in fare per mile for taxi companies.
+        Standardizes company names and computes metrics such as differences from the previous month's fare per mile.
+    */
+    Fare_Increases AS (
+        SELECT
+            REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') AS standardized_company, -- Standardize company names
+            'II.b.1-Largest Month-Over-Month Pct Increase in Fare Per Mile' AS Metric_Description,
+            company,
+            FORMAT_TIMESTAMP('%Y-%m', trip_month) AS trip_month, -- Format trip month as YYYY-MM
+            metric,
+            LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS Mon_Prior_Metric_Val, -- Previous month's metric
+            metric - LAG(metric) OVER (PARTITION BY REGEXP_REPLACE(LOWER(TRIM(company)), r'[^a-z0-9\s]', '') ORDER BY trip_month) AS metric_delta -- Month-over-month change
+        FROM (
+            SELECT
+                company,
+                DATE_TRUNC(trip_start_timestamp, MONTH) AS trip_month, -- Extract month from trip start timestamp
+                SAFE_DIVIDE(SUM(fare), SUM(trip_miles)) AS metric -- Calculate fare per mile
+            FROM
+                `bigquery-public-data.chicago_taxi_trips.taxi_trips`
+            WHERE 
+                company IS NOT NULL -- Exclude trips with no company information
+                AND trip_miles > 0 -- Exclude trips with zero or negative miles
+            GROUP BY
+                company, 
+                DATE_TRUNC(trip_start_timestamp, MONTH)
+        ) aggregated_data
+    ),
+
+    -- Rank Trip Decreases by Metric Delta
+    MoM_Trip_Decreases_Ranked AS (
+        SELECT
+            Metric_Description,
+            standardized_company,
+            company,
+            trip_month,
+            metric,
+            Mon_Prior_Metric_Val,
+            metric_delta,
+            SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) AS Metric_Mon_Pct_Chg, -- Calculate percentage change
+            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(ABS(metric_delta), Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
+            ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) ASC) AS rank -- Rank by largest decrease
+        FROM
+            Trip_Decreases
+        WHERE
+            Mon_Prior_Metric_Val IS NOT NULL -- Exclude rows with no prior month data
+            AND Mon_Prior_Metric_Val > 100 -- Exclude months with very low prior metrics
+            AND metric > 100 -- Exclude months with very low current metrics
+            AND SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) >= -10 -- Cap extreme percentage changes
+    ),
+    
+    -- Rank Fare Per Mile Increases by Metric Delta
+    MoM_FarePerMile_Increases_Ranked AS (
+        SELECT
+            Metric_Description,
+            standardized_company,
+            company,
+            trip_month,
+            metric,
+            Mon_Prior_Metric_Val,
+            metric_delta,
+            SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) AS Metric_Mon_Pct_Chg, -- Calculate percentage change
+            CONCAT(FORMAT('%.1f', SAFE_DIVIDE(ABS(metric_delta), Mon_Prior_Metric_Val) * 100), '%') AS Metric_Mon_Pct_Chg_Str, -- Format percentage change as string
+            ROW_NUMBER() OVER (PARTITION BY standardized_company ORDER BY SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) DESC) AS rank -- Rank by largest increase
+        FROM
+            Fare_Increases
+        WHERE
+            Mon_Prior_Metric_Val IS NOT NULL -- Exclude rows with no prior month data
+            AND Mon_Prior_Metric_Val > 0.1 -- Exclude months with very low prior metrics
+            AND metric > 0.1 -- Exclude months with very low current metrics
+            AND SAFE_DIVIDE(metric_delta, Mon_Prior_Metric_Val) <= 10 -- Cap extreme percentage increases
+    ),
+
+    -- Extract Top Trip Decrease Insights
+    Top_Trip_Decrease_Insights AS (
+        SELECT
+            b.*,
+            CASE
+                WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
+                ELSE CONCAT(
+                    "In ",
+                    FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
+                    ", trips decreased by ",
+                    FORMAT("%'d", CAST(ABS(b.Metric_Delta) AS INT64)), -- Use FORMAT with '%d' and ',' for comma-separated numbers
+                    " (",
+                    b.Metric_Mon_Pct_Chg_Str,
+                    ") compared to the previous month."
+                )
+            END AS Metric_Insight,
+            CASE
+                WHEN b.Mon_Prior_Metric_Val IS NULL THEN NULL -- No reasons if prior data is missing
+                ELSE 
+                    "Potential reasons could include: " ||
+                    "\n- seasonal changes," ||
+                    "\n- weather conditions," ||
+                    "\n- reduced demand due to events," ||
+                    "\n- operational challenges," ||
+                    "\n- changes in regulations," ||
+                    "\n- decreased fleet size," ||
+                    "\n- increased competition," ||
+                    "\n- changes in service offerings," ||
+                    "\n- economic factors affecting ridership," ||
+                    "\n- changes in customer preferences"
+            END AS Metric_Reasons
+        FROM (
+            SELECT
+                a.*,
+                ROW_NUMBER() OVER (PARTITION BY a.standardized_company ORDER BY a.overall_rank ASC) AS company_rank -- Ensure uniqueness per company
+            FROM (
+                SELECT
+                    Metric_Description,
+                    standardized_company,
+                    company AS Taxi_Company,
+                    trip_month AS Trip_Month,
+                    metric AS Mon_Metric_Val,
+                    metric_delta AS Metric_Delta,
+                    Mon_Prior_Metric_Val,
+                    Metric_Mon_Pct_Chg,
+                    Metric_Mon_Pct_Chg_Str,
+                    ROW_NUMBER() OVER (ORDER BY metric_delta ASC) AS overall_rank -- Rank globally by largest decrease
+                FROM
+                    MoM_Trip_Decreases_Ranked
+                WHERE
+                    rank = 1 -- Only consider the top decrease for each company
+            ) a
+            WHERE
+                overall_rank <= 3 -- Limit to the top 3 decreases overall
+        ) b
+        WHERE
+            b.company_rank = 1 -- Ensure each company appears only once
+    ),
+
+    -- Extract Top Fare Per Mile Increase Insights
+    Top_FarePerMile_Increase_Insights AS (
+        SELECT
+            b.*,
+            CASE
+            WHEN b.Mon_Prior_Metric_Val IS NULL THEN "No Prior Data Available to Calculate Insights" -- Handle missing prior month data
+            ELSE CONCAT(
+                "In ",
+                FORMAT_TIMESTAMP('%b %Y', PARSE_TIMESTAMP('%Y-%m', b.Trip_Month)),
+                ", fare per mile increased by ",
+                CONCAT("$", FORMAT("%'.2f", ABS(b.Metric_Delta))), -- Use FORMAT with '%,.2f' for comma-separated numbers rounded to 2 decimals and format as currency
+                " (",
+                b.Metric_Mon_Pct_Chg_Str,
+                ") compared to the previous month."
+            )
+            END AS Metric_Insight,
+            CASE
+            WHEN b.Mon_Prior_Metric_Val IS NULL THEN NULL -- No reasons if prior data is missing
+            ELSE 
+                "Potential reasons could include: " ||
+                "\n- increased demand for premium services," ||
+                "\n- adjustments to pricing models," ||
+                "\n- reduced availability of discounts or promotions," ||
+                "\n- longer trips with higher fares," ||
+                "\n- seasonal or event-driven demand surges," ||
+                "\n- operational changes to optimize revenue," ||
+                "\n- changes in trip patterns or routes," ||
+                "\n- economic factors influencing pricing," ||
+                "\n- reduced competition or market consolidation."
+            END AS Metric_Reasons
+        FROM (
+            SELECT
+                a.*,
+                ROW_NUMBER() OVER (PARTITION BY a.standardized_company ORDER BY a.overall_rank ASC) AS company_rank -- Ensure uniqueness per company
+            FROM (
+                SELECT
+                    Metric_Description,
+                    standardized_company,
+                    company AS Taxi_Company,
+                    trip_month AS Trip_Month,
+                    metric AS Mon_Metric_Val,
+                    metric_delta AS Metric_Delta,
+                    Mon_Prior_Metric_Val,
+                    Metric_Mon_Pct_Chg,
+                    Metric_Mon_Pct_Chg_Str,
+                    ROW_NUMBER() OVER (ORDER BY metric_delta DESC) AS overall_rank -- Rank globally by largest increase
+                FROM
+                    MoM_FarePerMile_Increases_Ranked
+                WHERE
+                    rank = 1 -- Only consider the top increase for each company
+            ) a
+            WHERE
+                overall_rank <= 3 -- Limit to the top 3 increases overall
+        ) b
+        WHERE
+            b.company_rank = 1 -- Ensure each company appears only once
+    )
+-- Combine Insights
+SELECT 
+    Metric_Description,
+    Taxi_Company,
+    Trip_Month,
+    Mon_Metric_Val,
+    Metric_Delta,
+    Mon_Prior_Metric_Val,
+    ROUND(Metric_Mon_Pct_Chg, 2) AS Metric_Mon_Pct_Chg, -- Round to 2 decimals
+    Metric_Mon_Pct_Chg_Str,
+    Metric_Insight,
+    Metric_Reasons
+FROM Top_Trip_Decrease_Insights -- Corrected reference to Top_Trip_Decrease_Insights
+UNION ALL
+SELECT 
+    Metric_Description,
+    Taxi_Company,
+    Trip_Month,
+    Mon_Metric_Val,
+    Metric_Delta,
+    Mon_Prior_Metric_Val,
+    ROUND(Metric_Mon_Pct_Chg, 2) AS Metric_Mon_Pct_Chg, -- Round to 2 decimals
+    Metric_Mon_Pct_Chg_Str,
+    Metric_Insight,
+    Metric_Reasons
+FROM Top_FarePerMile_Increase_Insights -- Corrected reference to Top_FarePerMile_Increase_Insights
+ORDER BY Metric_Description, Metric_Delta; -- Order by metric description and Metric Delta
+-- End of Query
